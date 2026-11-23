@@ -649,13 +649,34 @@
 
     <!-- ==================== MODAL 3: BRANCH / EVENT NAME (REQUIRED ON FIRST OPEN) ==================== -->
     <div id="branchModal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border-2 border-[#1454A6]/20">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border-2 border-[#1454A6]/20 max-h-[90vh] overflow-y-auto">
             <div class="inline-flex items-center gap-1.5 bg-blue-50 text-[#1454A6] text-[11px] font-bold px-3 py-1 rounded-full mb-2">
                 <span>📍 ตั้งค่าจุดขายก่อนเริ่มงาน</span>
             </div>
-            <h3 class="text-lg font-extrabold text-slate-800 mb-1">ระบุชื่อสาขา / งาน Event</h3>
-            <p class="text-xs text-slate-500 mb-3 leading-relaxed">กรุณาตั้งชื่อสาขาหรือบูธให้ชัดเจน เพื่อให้ยอดขายและสต็อกแยกออกจากสาขาอื่นไม่ปนกันครับ</p>
+            <h3 class="text-lg font-extrabold text-slate-800 mb-1">เลือกหรือระบุชื่อสาขา / งาน Event</h3>
+            <p class="text-xs text-slate-500 mb-3 leading-relaxed">เลือกสาขาที่เคยตั้งไว้ หรือพิมพ์ชื่อใหม่เพื่อให้ยอดขายและสต็อกแยกออกจากสาขาอื่นครับ</p>
+
+            <!-- Quick Select Existing / Saved Branches -->
+            <div id="savedBranchSection" class="hidden mb-3">
+                <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-[11px] font-bold text-slate-600">สาขา / บูธที่เคยตั้งไว้:</span>
+                    <span class="text-[10px] text-slate-400">แตะเพื่อเลือก</span>
+                </div>
+                <div id="savedBranchChips" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-200/80">
+                    <!-- Saved branch chips injected by JS -->
+                </div>
+            </div>
+
             <input type="text" id="branchInput" placeholder="เช่น บูธ A1 (พารากอน) หรือ สาขาทองหล่อ" class="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-[#1454A6]">
+
+            <!-- Delete Branch Action (For cleaning up after event ends) -->
+            <div id="deleteBranchWrapper" class="hidden mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                <span class="text-[11px] text-slate-400">จบงานแล้ว?</span>
+                <button type="button" onclick="confirmDeleteBranch()" class="text-xs font-bold text-rose-600 hover:bg-rose-50 px-2.5 py-1.5 rounded-xl flex items-center gap-1">
+                    <span>🗑️ ลบสาขานี้หลังจบงาน</span>
+                </button>
+            </div>
+
             <div class="flex justify-end gap-2 mt-4">
                 <button id="branchCancelBtn" onclick="closeModal('branchModal')" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">ยกเลิก</button>
                 <button onclick="saveBranchName()" class="btn-press px-5 py-2.5 rounded-xl bg-[#1454A6] hover:bg-[#0F4387] text-white text-xs font-bold shadow">บันทึกชื่อสาขา</button>
@@ -1068,6 +1089,7 @@
 
         let appState = {
             branchName: '',
+            savedBranches: [],
             soundEnabled: true,
             startingCash: EMBEDDED_POS_CONFIG.startingCash !== undefined ? Number(EMBEDDED_POS_CONFIG.startingCash) : 0,
             promptpayId: EMBEDDED_POS_CONFIG.promptpayId || '004999205349524',
@@ -1117,10 +1139,36 @@
                     if (!Array.isArray(appState.cart)) appState.cart = [];
                     if (!Array.isArray(appState.salesHistory)) appState.salesHistory = [];
                     if (!Array.isArray(appState.stockLogs)) appState.stockLogs = [];
+                    if (!Array.isArray(appState.savedBranches)) appState.savedBranches = [];
                 }
             } catch (e) {
                 console.error('Load state failed:', e);
             }
+            rebuildSavedBranchesRegistry(false);
+        }
+
+        function rebuildSavedBranchesRegistry(persist = true) {
+            const set = new Set();
+            if (Array.isArray(appState.savedBranches)) {
+                appState.savedBranches.forEach(b => {
+                    if (b && String(b).trim()) set.add(String(b).trim());
+                });
+            }
+            if (appState.branchName && String(appState.branchName).trim()) {
+                set.add(String(appState.branchName).trim());
+            }
+            appState.salesHistory.forEach(s => {
+                if (s && s.branch && String(s.branch).trim() && String(s.branch).trim() !== 'ไม่ระบุสาขา') {
+                    set.add(String(s.branch).trim());
+                }
+            });
+            appState.stockLogs.forEach(l => {
+                if (l && l.branch && String(l.branch).trim() && String(l.branch).trim() !== 'ไม่ระบุสาขา') {
+                    set.add(String(l.branch).trim());
+                }
+            });
+            appState.savedBranches = Array.from(set);
+            if (persist) saveState();
         }
 
         function saveState() {
@@ -1291,6 +1339,7 @@
                     appState.stockLogs = Array.from(stockMap.values()).sort((a, b) => Number(b.id) - Number(a.id));
                 }
 
+                rebuildSavedBranchesRegistry(false);
                 saveState();
                 lastCloudSyncTime = new Date();
                 updateCloudIndicator('connected');
@@ -2186,10 +2235,10 @@
             } else {
                 branchSelect.disabled = false;
                 const currentBranch = branchSelect.value || 'ALL';
-                const branches = new Set();
+                const branches = new Set(appState.savedBranches || []);
                 if (appState.branchName) branches.add(appState.branchName);
-                appState.salesHistory.forEach(s => { if (s.branch) branches.add(s.branch); });
-                appState.stockLogs.forEach(l => { if (l.branch) branches.add(l.branch); });
+                appState.salesHistory.forEach(s => { if (s.branch && s.branch !== 'ไม่ระบุสาขา') branches.add(s.branch); });
+                appState.stockLogs.forEach(l => { if (l.branch && l.branch !== 'ไม่ระบุสาขา') branches.add(l.branch); });
 
                 let bHtml = `<option value="ALL">🌐 รวมทุกสาขา / บูธ</option>`;
                 Array.from(branches).sort().forEach(b => {
@@ -2670,14 +2719,58 @@
         // ---------------------------------------------------------
         function openBranchModal(isMandatory = false) {
             if (!isMandatory) playTapSound();
-            document.getElementById('branchInput').value = appState.branchName || '';
+            rebuildSavedBranchesRegistry(false);
+            const currentVal = appState.branchName || '';
+            document.getElementById('branchInput').value = currentVal;
+
             const cancelBtn = document.getElementById('branchCancelBtn');
             if (cancelBtn) {
                 if (isMandatory && !appState.branchName) cancelBtn.classList.add('hidden');
                 else cancelBtn.classList.remove('hidden');
             }
+
+            renderSavedBranchChips(currentVal);
+
+            const delWrapper = document.getElementById('deleteBranchWrapper');
+            if (delWrapper) {
+                if (currentVal && (appState.savedBranches.includes(currentVal) || appState.salesHistory.some(s => s.branch === currentVal) || appState.stockLogs.some(l => l.branch === currentVal))) {
+                    delWrapper.classList.remove('hidden');
+                } else {
+                    delWrapper.classList.add('hidden');
+                }
+            }
+
             document.getElementById('branchModal').classList.remove('hidden');
             setTimeout(() => document.getElementById('branchInput').focus(), 120);
+        }
+
+        function renderSavedBranchChips(activeName = '') {
+            const section = document.getElementById('savedBranchSection');
+            const chipsBox = document.getElementById('savedBranchChips');
+            if (!section || !chipsBox) return;
+
+            const branches = appState.savedBranches || [];
+            if (branches.length === 0) {
+                section.classList.add('hidden');
+                return;
+            }
+
+            section.classList.remove('hidden');
+            chipsBox.innerHTML = branches.map(b => {
+                const isCurrent = b === activeName;
+                const safeStr = b.replace(/'/g, "\\'");
+                return `
+                    <button type="button" onclick="selectSavedBranch('${safeStr}')" class="btn-press px-3 py-1.5 rounded-xl text-xs font-bold transition ${isCurrent ? 'bg-[#1454A6] text-white shadow-2xs' : 'bg-white text-slate-700 border border-slate-300 hover:border-[#1454A6] hover:text-[#1454A6]'}">
+                        📍 ${b}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function selectSavedBranch(branchName) {
+            playTapSound();
+            document.getElementById('branchInput').value = branchName;
+            renderSavedBranchChips(branchName);
         }
 
         function saveBranchName() {
@@ -2687,35 +2780,84 @@
                 return;
             }
             appState.branchName = val;
+            if (!Array.isArray(appState.savedBranches)) appState.savedBranches = [];
+            if (!appState.savedBranches.includes(val)) {
+                appState.savedBranches.push(val);
+            }
             saveState();
             updateBranchDisplay();
             updateQuickStockBadge();
             closeModal('branchModal');
             playSuccessSound();
             showToast(`✅ ตั้งค่าจุดขาย: ${val}`);
+            if (!document.getElementById('adminView').classList.contains('hidden')) {
+                renderAdminDashboard();
+            }
         }
 
         function updateBranchDisplay() {
-            document.getElementById('branchNameDisplay').textContent = appState.branchName || 'กรอกชื่อสาขา / Event';
+    const el = document.getElementById('branchNameDisplay');
+    if (!el) return;
+    const name = (appState.branchName || '').trim();
+    el.textContent = name || 'กรอกชื่อสาขา / Event';
+}
+
+function confirmDeleteBranch() {
+    const targetBranch = (document.getElementById('branchInput').value || appState.branchName || '').trim();
+    if (!targetBranch) {
+        showToast('⚠️ ไม่พบชื่อสาขาที่จะลบ');
+        return;
+    }
+    showDialog(`จบงานและลบสาขา "${targetBranch}" พร้อมบิลและสต็อกของสาขานี้ทั้งหมดใช่หรือไม่?`, async () => {
+                const removedSales = appState.salesHistory.filter(s => (s.branch || 'ไม่ระบุสาขา') === targetBranch);
+                const removedLogs = appState.stockLogs.filter(l => (l.branch || 'ไม่ระบุสาขา') === targetBranch);
+
+                appState.salesHistory = appState.salesHistory.filter(s => (s.branch || 'ไม่ระบุสาขา') !== targetBranch);
+                appState.stockLogs = appState.stockLogs.filter(l => (l.branch || 'ไม่ระบุสาขา') !== targetBranch);
+                appState.savedBranches = (appState.savedBranches || []).filter(b => b !== targetBranch);
+
+                if (appState.branchName === targetBranch) {
+                    appState.branchName = appState.savedBranches[0] || '';
+                }
+
+                saveState();
+                updateBranchDisplay();
+                updateQuickStockBadge();
+                closeModal('branchModal');
+                renderAdminDashboard();
+                showToast(`🗑️ ลบสาขา "${targetBranch}" และเคลียร์ข้อมูลเรียบร้อยแล้ว`);
+
+                if (!appState.branchName) {
+                    setTimeout(() => openBranchModal(true), 300);
+                }
+
+                const base = cleanFirebaseBaseUrl(appState.firebaseUrl);
+                if (base) {
+                    try {
+                        await Promise.all([
+                            ...removedSales.map(s => fetch(`${base}/sales/${s.id}.json`, { method: 'DELETE' })),
+                            ...removedLogs.map(l => fetch(`${base}/stockLogs/${l.id}.json`, { method: 'DELETE' }))
+                        ]);
+                    } catch (e) {}
+                }
+            });
         }
 
         function openStartingCashModal() {
             playTapSound();
-            document.getElementById('startingCashInput').value = appState.startingCash;
+            document.getElementById('startingCashInput').value = Number(appState.startingCash) || 0;
             document.getElementById('startingCashModal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('startingCashInput').focus(), 100);
         }
 
         function saveStartingCash() {
-            appState.startingCash = Math.max(0, parseFloat(document.getElementById('startingCashInput').value) || 0);
+            const val = Math.max(0, parseFloat(document.getElementById('startingCashInput').value) || 0);
+            appState.startingCash = val;
             saveState();
             closeModal('startingCashModal');
             renderAdminDashboard();
-            showToast('✅ อัปเดตเงินทอนตั้งต้นแล้ว');
-        }
-
-        function openQrConfigModal() {
-            closeModal('checkoutModal');
-            openSettingsModal();
+            playSuccessSound();
+            showToast(`✅ ตั้งค่าเงินทอนตั้งต้น ${val.toLocaleString()} ฿ แล้ว`);
         }
 
         function openSettingsModal() {
@@ -2723,75 +2865,99 @@
             document.getElementById('promptpayIdInput').value = appState.promptpayId || '';
             document.getElementById('promptpayNameInput').value = appState.promptpayName || '';
             document.getElementById('promptpayAccountMaskInput').value = appState.promptpayAccountMask || '';
+
+            const cloudSummary = document.getElementById('settingsCloudSummary');
+            if (cloudSummary) {
+                const base = cleanFirebaseBaseUrl(appState.firebaseUrl);
+                cloudSummary.textContent = base ? `เชื่อมต่อแล้ว: ${base}` : 'ยังไม่ได้เชื่อมต่อ (โหมดออฟไลน์)';
+            }
+
             const resetBtn = document.getElementById('btnResetAllData');
             if (resetBtn) {
                 if (isOwnerUnlocked) resetBtn.classList.remove('hidden');
                 else resetBtn.classList.add('hidden');
             }
-            const base = cleanFirebaseBaseUrl(appState.firebaseUrl);
-            document.getElementById('settingsCloudSummary').textContent = base ? `เชื่อมต่อแล้ว: ${base}` : 'ยังไม่ได้เชื่อมต่อ (โหมดออฟไลน์)';
+
             renderCategoryConfigList();
             renderProductConfigList();
             document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function openQrConfigModal() {
+            closeModal('checkoutModal');
+            openSettingsModal();
+            const detailsEl = document.querySelector('#settingsModal details');
+            if (detailsEl) detailsEl.open = true;
+            setTimeout(() => document.getElementById('promptpayIdInput').focus(), 120);
         }
 
         function renderCategoryConfigList() {
             const container = document.getElementById('categoryConfigList');
             if (!container) return;
             const cats = appState.categories || DEFAULT_CATEGORIES;
-            container.innerHTML = cats.map(c => `
-                <div class="bg-white p-2 rounded-xl border border-indigo-100 flex items-center justify-between gap-2">
-                    <div class="flex items-center gap-2 min-w-0">
-                        <div class="w-9 h-9 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 overflow-hidden">
-                            ${getGraphicIllustrationSVG(c.graphic || c.id, 1)}
+
+            container.innerHTML = cats.map((c, idx) => {
+                const isDefaultCore = ['drink', 'tasting'].includes(c.id);
+                return `
+                    <div class="bg-white border border-indigo-200/80 rounded-2xl p-2.5 flex items-center justify-between gap-2 shadow-2xs">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <div class="w-10 h-9 shrink-0 flex items-center justify-center scale-75">
+                                ${getGraphicIllustrationSVG(c.graphic || c.id, 1)}
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs font-extrabold text-slate-800 truncate">${c.emoji || '🏷️'} ${c.label}</p>
+                                <p class="text-[10px] text-slate-500">หน่วย: ${c.unit} • ${c.deductCans ? 'ตัดสต็อก กป.' : 'ไม่ตัด กป.'}</p>
+                            </div>
                         </div>
-                        <div class="min-w-0">
-                            <p class="text-xs font-bold text-slate-800 truncate">${c.emoji || '🏷️'} ${c.label}</p>
-                            <p class="text-[10px] text-slate-400">หน่วย: ${c.unit} • ${c.deductCans ? 'ตัดสต็อกกป.' : 'ไม่ตัดสต็อกกป.'}</p>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button type="button" onclick="openCategoryEditorModal('${c.id}')" class="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px]">แก้ไข</button>
+                            ${!isDefaultCore ? `<button type="button" onclick="deleteCategoryItem(${idx})" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px]">ลบ</button>` : ''}
                         </div>
                     </div>
-                    <div class="flex items-center gap-1 shrink-0">
-                        <button type="button" onclick="openCategoryEditorModal('${c.id}')" class="text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-lg">แก้ไข</button>
-                        ${c.id !== 'drink' ? `<button type="button" onclick="deleteCategoryItem('${c.id}')" class="text-[11px] font-bold text-rose-500 hover:bg-rose-50 px-1.5 py-1 rounded-lg">ลบ</button>` : ''}
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
-        function openCategoryEditorModal(catId = '') {
+        function openCategoryEditorModal(catId = null) {
             playTapSound();
-            const isEdit = Boolean(catId);
-            const existing = isEdit ? (appState.categories || []).find(c => c.id === catId) : null;
+            syncProductRowsFromDOM();
+            const existing = catId ? (appState.categories || []).find(c => c.id === catId) : null;
 
-            document.getElementById('catEditorTitle').textContent = isEdit ? '✏️ แก้ไขหมวดหมู่ & ภาพกราฟิก' : '🎨 สร้างหมวดหมู่ & เลือกภาพกราฟิก';
+            document.getElementById('catEditorTitle').textContent = existing ? '✏️ แก้ไขหมวดหมู่สินค้า' : '🎨 สร้างหมวดหมู่ & เลือกภาพกราฟิก';
             document.getElementById('catEditIdInput').value = existing ? existing.id : '';
             document.getElementById('catEmojiInput').value = existing ? (existing.emoji || '🍹') : '🍹';
             document.getElementById('catLabelInput').value = existing ? existing.label : '';
             document.getElementById('catUnitInput').value = existing ? existing.unit : 'แก้ว';
             document.getElementById('catDeductCanInput').value = existing && existing.deductCans ? 'true' : 'false';
 
-            const selectedGraphic = existing ? (existing.graphic || existing.id) : 'cocktail';
-            selectCategoryGraphic(selectedGraphic);
+            const selectedGraphic = existing ? (existing.graphic || 'cocktail') : 'cocktail';
+            document.getElementById('catGraphicKeyInput').value = selectedGraphic;
+            renderSvgGraphicPicker(selectedGraphic);
 
             document.getElementById('categoryEditorModal').classList.remove('hidden');
         }
 
-        function selectCategoryGraphic(graphicKey) {
-            document.getElementById('catGraphicKeyInput').value = graphicKey;
+        function renderSvgGraphicPicker(selectedKey) {
             const grid = document.getElementById('svgGraphicPickerGrid');
             if (!grid) return;
-
             grid.innerHTML = SVG_GRAPHIC_LIBRARY.map(item => {
-                const isSel = item.key === graphicKey;
+                const isSel = item.key === selectedKey;
                 return `
-                    <button type="button" onclick="selectCategoryGraphic('${item.key}')" class="btn-press p-2 rounded-xl border-2 flex flex-col items-center justify-between gap-1 text-center transition ${isSel ? 'border-indigo-600 bg-indigo-50/70 shadow-2xs' : 'border-slate-200 bg-white hover:border-indigo-300'}">
-                        <div class="h-11 flex items-center justify-center">
-                            ${getGraphicIllustrationSVG(item.key, 1)}
-                        </div>
-                        <span class="text-[10px] font-bold leading-tight ${isSel ? 'text-indigo-900' : 'text-slate-600'}">${item.label}</span>
+                    <button type="button" onclick="selectCategoryGraphic('${item.key}', '${item.emoji}')" class="p-2 rounded-xl border-2 text-center transition flex flex-col items-center justify-center gap-1 ${isSel ? 'border-indigo-600 bg-indigo-50/80 shadow-2xs' : 'border-slate-200 bg-white hover:border-indigo-300'}">
+                        <div class="scale-90 pointer-events-none">${getGraphicIllustrationSVG(item.key, 1)}</div>
+                        <span class="text-[10px] font-bold text-slate-700 leading-tight line-clamp-1">${item.label}</span>
                     </button>
                 `;
             }).join('');
+        }
+
+        function selectCategoryGraphic(graphicKey, suggestedEmoji) {
+            playTapSound();
+            document.getElementById('catGraphicKeyInput').value = graphicKey;
+            if (!document.getElementById('catEditIdInput').value && suggestedEmoji) {
+                document.getElementById('catEmojiInput').value = suggestedEmoji;
+            }
+            renderSvgGraphicPicker(graphicKey);
         }
 
         function saveCategoryItem() {
@@ -2800,25 +2966,29 @@
             const label = document.getElementById('catLabelInput').value.trim();
             const unit = document.getElementById('catUnitInput').value.trim() || 'ชิ้น';
             const deductCans = document.getElementById('catDeductCanInput').value === 'true';
-            const graphic = document.getElementById('catGraphicKeyInput').value || 'merch_bag';
+            const graphic = document.getElementById('catGraphicKeyInput').value || 'cocktail';
 
             if (!label) {
-                showToast('⚠️ กรุณาตั้งชื่อหมวดหมู่');
+                showToast('⚠️ กรุณาระบุชื่อหมวดหมู่');
                 return;
             }
 
-            syncProductRowsFromDOM();
+            if (!Array.isArray(appState.categories)) {
+                appState.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+            }
 
             if (editId) {
-                const idx = appState.categories.findIndex(c => c.id === editId);
-                if (idx !== -1) {
-                    appState.categories[idx] = {
-                        ...appState.categories[idx],
-                        emoji, label, unit, deductCans, graphic
-                    };
+                const target = appState.categories.find(c => c.id === editId);
+                if (target) {
+                    target.emoji = emoji;
+                    target.label = label;
+                    target.unit = unit;
+                    target.deductCans = deductCans;
+                    target.graphic = graphic;
                 }
             } else {
-                const palette = CUSTOM_COLOR_PALETTE[appState.categories.length % CUSTOM_COLOR_PALETTE.length];
+                const colorIdx = appState.categories.length % CUSTOM_COLOR_PALETTE.length;
+                const palette = CUSTOM_COLOR_PALETTE[colorIdx];
                 appState.categories.push({
                     id: 'cat_' + Date.now(),
                     emoji,
@@ -2832,27 +3002,29 @@
             }
 
             saveState();
+            closeModal('categoryEditorModal');
             renderCategoryConfigList();
             renderProductConfigList();
             renderSaleProducts();
-            closeModal('categoryEditorModal');
             playSuccessSound();
-            showToast(`✅ บันทึกหมวดหมู่ "${label}" แล้ว`);
+            showToast(`✅ บันทึกหมวดหมู่ "${label}" เรียบร้อย`);
         }
 
-        function deleteCategoryItem(catId) {
-            if (catId === 'drink') return;
-            showDialog('ลบหมวดหมู่นี้ใช่หรือไม่? (สินค้าในหมวดนี้จะถูกย้ายไปหมวดเครื่องดื่ม)', () => {
-                syncProductRowsFromDOM();
-                appState.categories = appState.categories.filter(c => c.id !== catId);
+        function deleteCategoryItem(idx) {
+            syncProductRowsFromDOM();
+            const cat = appState.categories[idx];
+            if (!cat) return;
+            showDialog(`ลบหมวดหมู่ "${cat.label}" ใช่หรือไม่?`, () => {
+                const fallbackId = appState.categories[0]?.id || 'drink';
                 appState.products.forEach(p => {
-                    if (p.category === catId) p.category = 'drink';
+                    if (p.category === cat.id) p.category = fallbackId;
                 });
+                appState.categories.splice(idx, 1);
                 saveState();
                 renderCategoryConfigList();
                 renderProductConfigList();
                 renderSaleProducts();
-                showToast('🗑️ ลบหมวดหมู่เรียบร้อยแล้ว');
+                showToast(`🗑️ ลบหมวดหมู่ "${cat.label}" แล้ว`);
             });
         }
 
