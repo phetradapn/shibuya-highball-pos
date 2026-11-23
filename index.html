@@ -1,0 +1,3312 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shibuya Highball POS</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js for PromptPay QR Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- html2canvas for 1-click Receipt PNG Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Google Fonts: Inter & Prompt -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Prompt', 'Inter', sans-serif;
+            background-color: #F4F7FC;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .font-num {
+            font-family: 'Inter', 'Prompt', sans-serif;
+            font-variant-numeric: tabular-nums;
+        }
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 9999px;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .btn-press {
+            transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .btn-press:active {
+            transform: scale(0.96);
+        }
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+        .sync-pulse {
+            animation: pulse-soft 1.5s infinite;
+        }
+
+        /* Print Styles for Daily Shift Summary Receipt */
+        @media print {
+            body * {
+                visibility: hidden !important;
+            }
+            #printReceiptArea, #printReceiptArea * {
+                visibility: visible !important;
+            }
+            #printReceiptArea {
+                position: fixed !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                max-width: 380px !important;
+                margin: 0 auto !important;
+                padding: 16px !important;
+                background: #FFFFFF !important;
+                color: #000000 !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col">
+
+    <!-- ==================== HEADER / NAVIGATION ==================== -->
+    <header class="bg-[#1454A6] text-white sticky top-0 z-30 shadow-md rounded-b-3xl">
+        <div class="max-w-5xl mx-auto px-4 pt-3 pb-3.5">
+            <!-- Top Row: Settings, Brand, Cloud Sync & Sound -->
+            <div class="flex items-center justify-between mb-2">
+                <button onclick="openSettingsModal()" class="btn-press p-2 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center" title="ตั้งค่า & จัดการเมนู">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </button>
+
+                <div class="text-center">
+                    <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight leading-none">Shibuya Highball</h1>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                    <!-- Cloud Sync Status Pill -->
+                    <button id="cloudStatusBtn" onclick="openCloudSetupModal()" class="btn-press px-2.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center gap-1.5 text-[11px] font-semibold" title="สถานะการซิงก์ออนไลน์">
+                        <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+                        <span id="cloudStatusText" class="hidden sm:inline">ออฟไลน์</span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+                        </svg>
+                    </button>
+
+                    <!-- Sound Toggle -->
+                    <button id="soundToggleBtn" onclick="toggleSound()" class="btn-press p-2 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center" title="เปิด/ปิดเสียง">
+                        <svg id="soundOnIcon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+                        </svg>
+                        <svg id="soundOffIcon" class="w-5 h-5 hidden text-red-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Branch / Event Pill -->
+            <div class="flex justify-center mb-3">
+                <button onclick="openBranchModal(false)" class="btn-press bg-[#0D3B7A] hover:bg-[#0A2E61] text-blue-100 text-xs sm:text-sm px-4 py-1.5 rounded-full flex items-center gap-1.5 border border-blue-400/30 shadow-inner">
+                    <span>📍</span>
+                    <span id="branchNameDisplay" class="font-medium truncate max-w-[230px] sm:max-w-xs">กรอกชื่อสาขา / Event</span>
+                    <span class="text-amber-300 text-xs">✏️</span>
+                </button>
+            </div>
+
+            <!-- Segmented Tab Switcher -->
+            <div class="bg-[#0D3B7A] p-1 rounded-full grid grid-cols-2 max-w-md mx-auto shadow-inner">
+                <button id="tabSaleBtn" onclick="switchTab('sale')" class="py-2 px-4 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all bg-white text-[#1454A6] shadow">
+                    <span>⌨️</span>
+                    <span>หน้าขาย</span>
+                </button>
+                <button id="tabAdminBtn" onclick="switchTab('admin')" class="py-2 px-4 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all text-blue-100 hover:text-white">
+                    <span>◔</span>
+                    <span>หลังบ้าน</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ==================== MAIN VIEW 1: SALE SCREEN ==================== -->
+    <main id="saleView" class="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-5 pt-3.5 pb-48">
+        <!-- Quick Stock & Category Filter Bar -->
+        <div class="flex flex-col gap-2 mb-3 px-1">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">เลือกรายการสินค้า / โปรโมชั่น</span>
+                <div class="flex items-center gap-1.5">
+                    <button onclick="openStockModal('tasting')" class="btn-press text-[11px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs" title="บันทึกเปิดชิมฟรี / ของแจก / เสียหาย">
+                        <span>🎁 ตัดชิมฟรี</span>
+                    </button>
+                    <button onclick="switchTab('admin')" class="text-xs font-semibold bg-blue-50 text-[#1454A6] border border-blue-200 px-2.5 py-1 rounded-full flex items-center gap-1">
+                        <span>📦 สต็อก:</span>
+                        <span id="quickStockBadge" class="font-num font-bold">0 กป.</span>
+                    </button>
+                </div>
+            </div>
+            <!-- Dynamic Category Quick Filter Pills -->
+            <div id="saleCategoryFilterBar" class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                <!-- Category pills injected dynamically by JS -->
+            </div>
+        </div>
+
+        <!-- Product Grid -->
+        <div id="productGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+            <!-- Product cards injected by JS -->
+        </div>
+    </main>
+
+    <!-- ==================== FIXED BOTTOM CART & CHECKOUT BAR ==================== -->
+    <div id="bottomCartBar" class="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-slate-200 shadow-[0_-8px_25px_rgba(15,23,42,0.08)] rounded-t-3xl transition-transform">
+        <div class="max-w-5xl mx-auto px-4 pt-2.5 pb-4">
+            <!-- Expandable Cart Items Drawer Trigger -->
+            <div class="flex items-center justify-between mb-1.5">
+                <button onclick="toggleCartDrawer()" class="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-[#1454A6] py-1">
+                    <span id="cartItemCountBadge" class="bg-[#1454A6] text-white font-num font-bold text-[11px] px-2 py-0.5 rounded-full">0</span>
+                    <span>รายการในตะกร้า</span>
+                    <svg id="cartChevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"></path>
+                    </svg>
+                </button>
+
+                <button id="clearCartBtn" onclick="clearCart()" class="hidden text-xs font-semibold text-rose-500 hover:text-rose-700 px-2 py-1 rounded-lg hover:bg-rose-50">
+                    ล้างรายการ
+                </button>
+            </div>
+
+            <!-- Collapsible Cart Item List -->
+            <div id="cartDrawerList" class="hidden max-h-44 overflow-y-auto mb-2.5 divide-y divide-slate-100 bg-slate-50 rounded-2xl px-3 border border-slate-200/70">
+                <!-- Cart items injected by JS -->
+            </div>
+
+            <!-- Summary Row -->
+            <div class="flex items-baseline justify-between mb-2.5 px-1">
+                <span id="cartTotalUnitsText" class="text-sm font-medium text-slate-600">0 รายการ</span>
+                <div class="flex items-baseline gap-1.5">
+                    <span class="text-xs text-slate-500 font-medium">ยอดสุทธิ</span>
+                    <span id="cartTotalPriceText" class="font-num text-2xl sm:text-3xl font-extrabold text-[#1454A6]">0 ฿</span>
+                </div>
+            </div>
+
+            <!-- Action Payment Buttons -->
+            <div class="grid grid-cols-2 gap-3">
+                <button id="btnPayCash" onclick="openCheckoutModal('cash')" disabled class="btn-press py-3.5 px-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 bg-slate-100 text-slate-400 cursor-not-allowed">
+                    <span>💵</span>
+                    <span>เงินสด</span>
+                </button>
+                <button id="btnPayQR" onclick="openCheckoutModal('qr')" disabled class="btn-press py-3.5 px-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 bg-slate-100 text-slate-400 cursor-not-allowed">
+                    <span>📱</span>
+                    <span>โอน QR / จ่ายผสม</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MAIN VIEW 2: ADMIN BACK-OFFICE ==================== -->
+    <main id="adminView" class="hidden flex-1 max-w-5xl w-full mx-auto px-3 sm:px-5 pt-4 pb-16 space-y-4">
+
+        <!-- Export / Share App File Card -->
+        <div class="bg-gradient-to-r from-[#1454A6] to-[#1D6CE0] text-white rounded-3xl p-4 shadow-sm flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center text-2xl shrink-0">💾</div>
+                <div>
+                    <h3 class="font-bold text-sm sm:text-base leading-tight">ดาวน์โหลดไฟล์แอป POS (.html)</h3>
+                    <p class="text-[11px] sm:text-xs text-blue-100 mt-0.5">ฝังหมวดหมู่ เมนูใหม่ รูปภาพ ลิงก์ออนไลน์ & รหัส PIN ติดไปกับไฟล์</p>
+                </div>
+            </div>
+            <button onclick="downloadAppHTML()" class="btn-press bg-white text-[#1454A6] hover:bg-blue-50 font-bold text-xs sm:text-sm px-4 py-2.5 rounded-2xl shadow shrink-0">
+                ดาวน์โหลด
+            </button>
+        </div>
+
+        <!-- Booth / Owner Access Mode Banner -->
+        <div id="accessControlBanner" class="bg-amber-50 border border-amber-200 rounded-3xl p-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+                <div id="accessIconBox" class="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-lg shrink-0">🔒</div>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h3 id="accessTitleText" class="font-bold text-sm text-amber-950">โหมดสาขาย่อย</h3>
+                        <span id="cloudBadgeAdmin" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">ออฟไลน์</span>
+                    </div>
+                    <p id="accessSubText" class="text-[11px] text-amber-800/80 mt-0.5">แสดงเฉพาะข้อมูลของสาขานี้ • ใส่รหัส Admin PIN เพื่อดูยอดรวมทุกสาขา</p>
+                </div>
+            </div>
+            <div id="accessActionButtons" class="flex items-center gap-1.5 flex-wrap">
+                <button onclick="openAdminPinModal()" class="btn-press bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-2xs flex items-center gap-1.5">
+                    <span>🔓 ปลดล็อกเจ้าของร้าน</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- HQ Branch Comparison Card (Visible ONLY when Owner Mode is unlocked) -->
+        <section id="hqBranchComparisonCard" class="hidden bg-white rounded-3xl p-4 sm:p-5 shadow-xs border-2 border-[#1454A6]/20">
+            <div class="flex items-center justify-between gap-2 mb-3">
+                <h2 class="font-bold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                    <span class="text-[#1454A6]">👑</span>
+                    <span>สรุปเปรียบเทียบยอดขายแยกตามสาขา / บูธ (HQ)</span>
+                </h2>
+                <span class="text-[11px] font-semibold text-slate-400">ตามช่วงวันที่เลือก</span>
+            </div>
+            <div id="branchComparisonList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                <!-- Branch comparison cards injected by JS -->
+            </div>
+        </section>
+
+        <!-- Card 1: Sales & Cash Summary -->
+        <section class="bg-white rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-200/80">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+                <h2 class="font-bold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                    <span class="text-[#1454A6]">📊</span>
+                    <span>สรุปยอดขาย & เงินทอน</span>
+                </h2>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                    <!-- Branch Filter Dropdown (Locked for Staff, Unlocked for Owner) -->
+                    <select id="adminBranchFilter" onchange="renderAdminDashboard()" class="bg-blue-50 border border-blue-200 text-[#1454A6] text-xs font-bold rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#1454A6]">
+                        <option value="ALL">🌐 รวมทุกสาขา / บูธ</option>
+                    </select>
+
+                    <!-- Date Filter Dropdown -->
+                    <select id="adminDateFilter" onchange="renderAdminDashboard()" class="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#1454A6]">
+                        <option value="ALL">📅 ดูทั้งหมด (ทุกวัน)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Total Sales Highlight Box -->
+            <div class="bg-[#EDF5FF] border border-blue-200/70 rounded-2xl p-4 mb-3 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-[#1454A6] mb-0.5">ยอดขายรวม</p>
+                    <p id="statTotalRevenue" class="font-num text-3xl sm:text-4xl font-extrabold text-[#1454A6]">0 ฿</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-slate-500">เงินสดรวมเงินทอนในเก๊ะ</p>
+                    <p id="statTotalCashInDrawer" class="font-num text-base sm:text-lg font-bold text-emerald-700">0 ฿</p>
+                </div>
+            </div>
+
+            <!-- 3 Breakdown Boxes -->
+            <div class="grid grid-cols-3 gap-2.5 mb-3">
+                <div class="bg-emerald-50/80 border border-emerald-200/60 rounded-2xl p-3 text-center">
+                    <p class="text-[11px] sm:text-xs font-medium text-emerald-800">เงินสดขายได้</p>
+                    <p id="statCashSales" class="font-num text-base sm:text-xl font-extrabold text-emerald-700 mt-0.5">0 ฿</p>
+                </div>
+                <div class="bg-sky-50/80 border border-sky-200/60 rounded-2xl p-3 text-center">
+                    <p class="text-[11px] sm:text-xs font-medium text-[#1454A6]">โอน QR</p>
+                    <p id="statQrSales" class="font-num text-base sm:text-xl font-extrabold text-[#1454A6] mt-0.5">0 ฿</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center">
+                    <p class="text-[11px] sm:text-xs font-medium text-slate-600">จำนวนบิล</p>
+                    <p id="statBillCount" class="font-num text-base sm:text-xl font-extrabold text-slate-800 mt-0.5">0 บิล</p>
+                </div>
+            </div>
+
+            <!-- Starting Cash Footer -->
+            <div class="flex items-center justify-between pt-2.5 border-t border-slate-100 text-xs sm:text-sm">
+                <span class="text-slate-500">เงินทอนตั้งต้น: <strong id="statStartingCash" class="font-num text-slate-800">0 ฿</strong></span>
+                <button onclick="openStartingCashModal()" class="btn-press bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1">
+                    <span>⚙️ ตั้งค่าเงินทอน</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Card 1.5: Dynamic Category Sales Breakdown -->
+        <section class="bg-white rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-200/80">
+            <h2 class="font-bold text-base sm:text-lg text-slate-800 flex items-center gap-2 mb-3">
+                <span class="text-[#1454A6]">🏷️</span>
+                <span>สรุปจำนวนสินค้าที่ขายได้แยกตามประเภท</span>
+            </h2>
+            <div id="adminCategoryBreakdownGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <!-- Category sales cards injected dynamically by JS -->
+            </div>
+        </section>
+
+        <!-- Card 2: Daily Stock Management (1 Tray = 12 Cans) -->
+        <section class="bg-white rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-200/80">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+                <h2 class="font-bold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                    <span>📦</span>
+                    <span>สต็อกเครื่องดื่มรายวัน (1 ถาด = 12 กป.)</span>
+                </h2>
+                <button onclick="openStockModal()" class="btn-press bg-[#0F9D58] hover:bg-[#0C854A] text-white font-bold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1">
+                    <span>+ เติมสต็อก / ชิมฟรี</span>
+                </button>
+            </div>
+
+            <!-- 3 Stock Counters -->
+            <div class="grid grid-cols-3 gap-2.5 mb-3">
+                <div class="bg-slate-50 border border-slate-200/70 rounded-2xl p-3 text-center">
+                    <p class="text-[11px] sm:text-xs font-medium text-slate-500">รับเข้าทั้งหมด</p>
+                    <p id="stockAddedCans" class="font-num text-lg sm:text-2xl font-extrabold text-slate-800 mt-0.5">0 กป.</p>
+                    <p id="stockAddedTrays" class="font-num text-[11px] text-slate-400">0 ถาด</p>
+                </div>
+                <div class="bg-rose-50/70 border border-rose-200/60 rounded-2xl p-3 text-center">
+                    <p class="text-[11px] sm:text-xs font-medium text-rose-700">ขาย / ชิม / แจก</p>
+                    <p id="stockOutCans" class="font-num text-lg sm:text-2xl font-extrabold text-rose-600 mt-0.5">0 กป.</p>
+                    <p id="stockOutTrays" class="font-num text-[11px] text-rose-400">0 ถาด</p>
+                </div>
+                <div class="bg-[#EDF5FF] border border-blue-200/80 rounded-2xl p-3 text-center">
+                    <p class="text-[11px] sm:text-xs font-bold text-[#1454A6]">คงเหลือสุทธิ</p>
+                    <p id="stockRemainCans" class="font-num text-lg sm:text-2xl font-extrabold text-[#1454A6] mt-0.5">0 กป.</p>
+                    <p id="stockRemainTrays" class="font-num text-[11px] text-blue-500 font-medium">0 ถาด 0 กป.</p>
+                </div>
+            </div>
+
+            <!-- Stock Log History Accordion -->
+            <details class="group bg-slate-50 rounded-2xl border border-slate-200/70">
+                <summary class="cursor-pointer px-3.5 py-2.5 text-xs font-semibold text-slate-600 flex items-center justify-between list-none">
+                    <span>📋 ประวัติการเติมสต็อก / เบิกชิมฟรี</span>
+                    <span class="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div id="stockLogList" class="px-3.5 pb-3 pt-1 divide-y divide-slate-200/70 max-h-48 overflow-y-auto text-xs">
+                    <!-- Stock logs injected by JS -->
+                </div>
+            </details>
+        </section>
+
+        <!-- Card 3: Printable / Exportable Daily Shift Summary Receipt -->
+        <section class="bg-white rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-200/80">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+                <h2 class="font-bold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                    <span>🧾</span>
+                    <span>ใบสรุปยอดปิดรอบ / ประจำวัน</span>
+                </h2>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <button onclick="copySummaryToLine()" class="btn-press bg-[#06C755] hover:bg-[#05b34c] text-white font-bold text-xs px-3 py-2 rounded-xl shadow-2xs flex items-center gap-1">
+                        <span>💬 คัดลอกส่ง LINE</span>
+                    </button>
+                    <button onclick="downloadSummaryPNG()" class="btn-press bg-[#1454A6] hover:bg-[#0F4387] text-white font-bold text-xs px-3 py-2 rounded-xl shadow-2xs flex items-center gap-1">
+                        <span>🖼️ บันทึกรูปบิล (PNG)</span>
+                    </button>
+                    <button onclick="printDailySummary()" class="btn-press bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-3 py-2 rounded-xl shadow-2xs flex items-center gap-1">
+                        <span>🖨️ พิมพ์ใบสรุป</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Visual Thermal Receipt Card (Target for Print & PNG Export) -->
+            <div id="printReceiptArea" class="bg-[#FAFCFF] border-2 border-dashed border-slate-300 rounded-2xl p-4 sm:p-5 max-w-md mx-auto text-slate-800 shadow-inner">
+                <div class="text-center border-b border-dashed border-slate-300 pb-3 mb-3">
+                    <p class="font-extrabold text-base tracking-wide text-slate-900">SHIBUYA HIGHBALL POS</p>
+                    <p class="text-xs font-semibold text-[#1454A6] mt-0.5">ใบสรุปยอดขายประจำวัน (SHIFT REPORT)</p>
+                    <p id="rcpBranchName" class="text-xs text-slate-600 mt-1 font-medium">สาขา: ไม่ระบุสาขา</p>
+                    <p id="rcpDateRange" class="text-[11px] text-slate-500">วันที่: ทั้งหมด</p>
+                    <p id="rcpPrintedAt" class="text-[10px] text-slate-400 mt-0.5">พิมพ์เมื่อ: -</p>
+                </div>
+
+                <!-- Section A: Financial Breakdown -->
+                <div class="space-y-1.5 text-xs border-b border-dashed border-slate-300 pb-3 mb-3">
+                    <p class="font-bold text-slate-700 mb-1">1. สรุปรายรับ & เงินสดในเก๊ะ</p>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">จำนวนบิลขายสำเร็จ:</span>
+                        <span id="rcpBillCount" class="font-num font-bold">0 บิล</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">ยอดขายเงินสด (Cash):</span>
+                        <span id="rcpCashSales" class="font-num font-bold text-emerald-700">0 ฿</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">ยอดขายโอน (PromptPay QR):</span>
+                        <span id="rcpQrSales" class="font-num font-bold text-[#1454A6]">0 ฿</span>
+                    </div>
+                    <div class="flex justify-between text-sm font-extrabold text-slate-900 pt-1 border-t border-slate-200">
+                        <span>ยอดขายสุทธิรวมทั้งหมด:</span>
+                        <span id="rcpTotalSales" class="font-num text-[#1454A6]">0 ฿</span>
+                    </div>
+                    <div class="flex justify-between text-slate-500 pt-1">
+                        <span>เงินทอนตั้งต้น (Starting Cash):</span>
+                        <span id="rcpStartCash" class="font-num">0 ฿</span>
+                    </div>
+                    <div class="flex justify-between font-bold text-emerald-800 bg-emerald-50 px-2 py-1 rounded-lg">
+                        <span>เงินสดต้องมีในเก๊ะ (รวมทอน):</span>
+                        <span id="rcpDrawerCash" class="font-num">0 ฿</span>
+                    </div>
+                </div>
+
+                <!-- Section B: Drink Stock & Merchandise Sold -->
+                <div class="space-y-1.5 text-xs border-b border-dashed border-slate-300 pb-3 mb-3">
+                    <p class="font-bold text-slate-700 mb-1">2. สรุปยอดสินค้า & สต็อกเครื่องดื่ม</p>
+                    <div id="rcpCategoryList" class="space-y-1">
+                        <!-- Injected by JS -->
+                    </div>
+                    <div class="pt-1.5 mt-1.5 border-t border-slate-200/80 space-y-1">
+                        <div class="flex justify-between text-slate-600">
+                            <span>สต็อกรับเข้า (ช่วงที่เลือก):</span>
+                            <span id="rcpStockIn" class="font-num font-semibold">0 กป.</span>
+                        </div>
+                        <div class="flex justify-between text-slate-600">
+                            <span>ชิมฟรี / ของแจก:</span>
+                            <span id="rcpStockTasting" class="font-num font-semibold">0 กป.</span>
+                        </div>
+                        <div class="flex justify-between font-bold text-[#1454A6]">
+                            <span>สต็อกเครื่องดื่มคงเหลือสุทธิ:</span>
+                            <span id="rcpStockRemain" class="font-num">0 กป. (0 ถาด 0 กป.)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section C: Top Sold Items -->
+                <div class="text-xs">
+                    <p class="font-bold text-slate-700 mb-1.5">3. รายละเอียดเมนูที่ขายได้</p>
+                    <div id="rcpItemBreakdown" class="space-y-1 text-slate-600">
+                        <p class="text-slate-400 italic">ไม่มีรายการขาย</p>
+                    </div>
+                </div>
+
+                <div class="text-center border-t border-dashed border-slate-300 pt-3 mt-4 text-[10px] text-slate-400">
+                    <p>ลงชื่อผู้ส่งยอด: ______________________</p>
+                    <p class="mt-1">ขอบคุณที่ร่วมสร้างยอดขาย Shibuya Highball!</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Card 4: Export to Google Sheets -->
+        <section class="bg-white rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-200/80">
+            <h2 class="font-bold text-base sm:text-lg text-slate-800 flex items-center gap-2 mb-3">
+                <span class="text-emerald-600">📈</span>
+                <span>ส่งออกข้อมูลเข้า Google Sheets</span>
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button onclick="copyToGoogleSheets()" class="btn-press bg-[#0F9D58] hover:bg-[#0C854A] text-white font-bold text-sm py-3 px-4 rounded-2xl shadow-xs flex items-center justify-center gap-2">
+                    <span>📋</span>
+                    <span>คัดลอกวางใน Google Sheets</span>
+                </button>
+                <button onclick="downloadCSV()" class="btn-press bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm py-3 px-4 rounded-2xl flex items-center justify-center gap-2">
+                    <span>📥</span>
+                    <span>ดาวน์โหลดไฟล์ .CSV</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Card 5: Sales Bill History -->
+        <section class="bg-white rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-200/80">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="font-bold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                    <span>📜</span>
+                    <span>ประวัติบิลขาย</span>
+                </h2>
+                <span id="historyCountLabel" class="text-xs text-slate-400 font-medium">0 รายการ</span>
+            </div>
+
+            <div id="salesHistoryList" class="space-y-2.5">
+                <!-- Sales history cards injected by JS -->
+            </div>
+        </section>
+    </main>
+
+    <!-- ==================== MODAL 1: CHECKOUT PAYMENT ==================== -->
+    <div id="checkoutModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 id="checkoutModalTitle" class="text-lg font-extrabold text-slate-800">ชำระเงิน</h3>
+                <button onclick="closeModal('checkoutModal')" class="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500">✕</button>
+            </div>
+
+            <!-- Order Total Banner -->
+            <div class="bg-[#EDF5FF] rounded-2xl p-3.5 my-3.5 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-[#1454A6] font-semibold">ยอดต้องชำระทั้งหมด</p>
+                    <p id="chkOrderItemsSummary" class="text-xs text-slate-500 mt-0.5">0 รายการ</p>
+                </div>
+                <p id="chkTotalDue" class="font-num text-3xl font-extrabold text-[#1454A6]">0 ฿</p>
+            </div>
+
+            <!-- CASH PAYMENT SECTION -->
+            <div id="cashPaymentSection" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">รับเงินสดมา (บาท)</label>
+                    <input type="number" id="cashReceivedInput" oninput="calculateCashChange()" placeholder="0" class="font-num w-full text-2xl font-extrabold text-right px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-[#1454A6]">
+                </div>
+
+                <!-- Quick Cash Buttons -->
+                <div class="grid grid-cols-4 gap-2">
+                    <button type="button" onclick="setQuickCash('exact')" class="btn-press py-2 px-2 bg-blue-50 hover:bg-blue-100 text-[#1454A6] font-bold text-xs rounded-xl border border-blue-200">พอดี</button>
+                    <button type="button" onclick="setQuickCash(100)" class="btn-press py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-num font-bold text-xs rounded-xl">100 ฿</button>
+                    <button type="button" onclick="setQuickCash(500)" class="btn-press py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-num font-bold text-xs rounded-xl">500 ฿</button>
+                    <button type="button" onclick="setQuickCash(1000)" class="btn-press py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-num font-bold text-xs rounded-xl">1,000 ฿</button>
+                </div>
+
+                <!-- Change Box -->
+                <div id="cashChangeBox" class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-center justify-between">
+                    <span class="text-sm font-bold text-emerald-800">เงินทอน</span>
+                    <span id="cashChangeAmount" class="font-num text-2xl font-extrabold text-emerald-700">0 ฿</span>
+                </div>
+            </div>
+
+            <!-- QR / MIXED PAYMENT SECTION -->
+            <div id="qrPaymentSection" class="hidden space-y-3">
+                <!-- Toggle Pure QR vs Split Cash+QR -->
+                <div class="flex items-center justify-between bg-slate-100 p-1 rounded-xl">
+                    <button type="button" id="modeFullQrBtn" onclick="setQrMode('full')" class="flex-1 py-1.5 rounded-lg text-xs font-bold bg-white text-[#1454A6] shadow-2xs">โอน QR เต็มจำนวน</button>
+                    <button type="button" id="modeSplitQrBtn" onclick="setQrMode('split')" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-600">จ่ายผสม (เงินสด + โอน)</button>
+                </div>
+
+                <!-- Split Cash Input (Hidden by default) -->
+                <div id="splitCashWrapper" class="hidden bg-amber-50/70 border border-amber-200 rounded-2xl p-3 space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="text-xs font-bold text-amber-900">เงินสดที่จ่ายร่วม (บาท):</label>
+                        <input type="number" id="splitCashInput" oninput="updateSplitQrAmount()" placeholder="0" class="font-num w-32 text-right font-extrabold text-base px-3 py-1.5 bg-white border border-amber-300 rounded-xl focus:outline-none focus:border-[#1454A6]">
+                    </div>
+                    <div class="flex items-center justify-between text-xs pt-1 border-t border-amber-200/70">
+                        <span class="font-semibold text-slate-600">ยอดสแกนโอน QR ส่วนที่เหลือ:</span>
+                        <span id="splitQrRemainingText" class="font-num font-extrabold text-base text-[#1454A6]">0 ฿</span>
+                    </div>
+                </div>
+
+                <!-- PromptPay QR Card -->
+                <div class="bg-white border-2 border-[#1454A6]/20 rounded-2xl p-4 text-center shadow-xs">
+                    <div class="inline-flex items-center gap-1.5 bg-[#113F7C] text-white text-[11px] font-bold px-3 py-1 rounded-full mb-2.5">
+                        <span>THAI QR PAYMENT</span>
+                        <span>•</span>
+                        <span>PromptPay</span>
+                    </div>
+                    
+                    <div id="promptpayQrContainer" class="flex justify-center items-center min-h-[190px] my-1">
+                        <!-- QR Canvas rendered here -->
+                    </div>
+
+                    <p id="qrReceiverNameDisplay" class="text-xs font-bold text-slate-700 mt-2">น.ส. จิณัฐชิสา ซาโนะ</p>
+                    <p id="qrAccountMaskDisplay" class="text-[11px] text-slate-500">บัญชี xxx-x-x5466-x • ยอดโอน <strong id="qrExactAmountLabel" class="font-num text-[#1454A6]">0 ฿</strong></p>
+                    
+                    <button type="button" onclick="openQrConfigModal()" class="mt-2 text-[11px] font-semibold text-[#1454A6] underline">
+                        ⚙️ ตั้งค่าบัญชีพร้อมเพย์ร้าน
+                    </button>
+                </div>
+            </div>
+
+            <!-- Optional Customer Note -->
+            <div class="mt-3">
+                <input type="text" id="orderNoteInput" placeholder="หมายเหตุบิล (ถ้ามี เช่น โต๊ะ 3 / ไม่รับถุง)" class="w-full text-xs px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-[#1454A6]">
+            </div>
+
+            <!-- Confirm Sale Button -->
+            <button id="confirmSaleBtn" onclick="confirmCheckout()" class="btn-press w-full mt-4 py-3.5 rounded-2xl bg-[#0F9D58] hover:bg-[#0C854A] text-white font-extrabold text-base shadow-md flex items-center justify-center gap-2">
+                <span>✅ ยืนยันรับเงิน / ปิดบิล</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 2: ADD STOCK / TASTING ==================== -->
+    <div id="stockModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 class="text-lg font-extrabold text-slate-800">จัดการสต็อกเครื่องดื่ม</h3>
+                <button onclick="closeModal('stockModal')" class="p-1.5 rounded-full bg-slate-100 text-slate-500">✕</button>
+            </div>
+
+            <div class="space-y-3.5 mt-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">ประเภทรายการ</label>
+                    <select id="stockActionType" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+                        <option value="add">➕ เติมสต็อกเพิ่ม (รับเข้า)</option>
+                        <option value="tasting">🎁 ตัดสต็อกของแจก / ชิมฟรี / เสียหาย</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">จำนวนถาด (12 กป.)</label>
+                        <input type="number" id="stockTrayInput" min="0" placeholder="0" class="font-num w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold text-center">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">เศษกระป๋อง</label>
+                        <input type="number" id="stockCanInput" min="0" placeholder="0" class="font-num w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-bold text-center">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">หมายเหตุ (เช่น รอบเช้า / เปิดชิมบูธ)</label>
+                    <input type="text" id="stockNoteInput" placeholder="ระบุหมายเหตุ..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                </div>
+
+                <button onclick="saveStockLog()" class="btn-press w-full py-3 rounded-2xl bg-[#1454A6] hover:bg-[#0F4387] text-white font-bold text-sm shadow">
+                    💾 บันทึกสต็อก
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 3: BRANCH / EVENT NAME (REQUIRED ON FIRST OPEN) ==================== -->
+    <div id="branchModal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border-2 border-[#1454A6]/20">
+            <div class="inline-flex items-center gap-1.5 bg-blue-50 text-[#1454A6] text-[11px] font-bold px-3 py-1 rounded-full mb-2">
+                <span>📍 ตั้งค่าจุดขายก่อนเริ่มงาน</span>
+            </div>
+            <h3 class="text-lg font-extrabold text-slate-800 mb-1">ระบุชื่อสาขา / งาน Event</h3>
+            <p class="text-xs text-slate-500 mb-3 leading-relaxed">กรุณาตั้งชื่อสาขาหรือบูธให้ชัดเจน เพื่อให้ยอดขายและสต็อกแยกออกจากสาขาอื่นไม่ปนกันครับ</p>
+            <input type="text" id="branchInput" placeholder="เช่น บูธ A1 (พารากอน) หรือ สาขาทองหล่อ" class="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-[#1454A6]">
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="branchCancelBtn" onclick="closeModal('branchModal')" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">ยกเลิก</button>
+                <button onclick="saveBranchName()" class="btn-press px-5 py-2.5 rounded-xl bg-[#1454A6] hover:bg-[#0F4387] text-white text-xs font-bold shadow">บันทึกชื่อสาขา</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 4: STARTING CASH ==================== -->
+    <div id="startingCashModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl">
+            <h3 class="text-lg font-extrabold text-slate-800 mb-1">⚙️ ตั้งค่าเงินทอนตั้งต้น</h3>
+            <p class="text-xs text-slate-500 mb-3">ระบุเงินทอนเริ่มต้นในเก๊ะสำหรับคำนวณเงินสดรวม</p>
+            <input type="number" id="startingCashInput" placeholder="0" class="font-num w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-extrabold text-right focus:outline-none focus:border-[#1454A6]">
+            <div class="flex justify-end gap-2 mt-4">
+                <button onclick="closeModal('startingCashModal')" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">ยกเลิก</button>
+                <button onclick="saveStartingCash()" class="btn-press px-5 py-2 rounded-xl bg-[#1454A6] text-white text-xs font-bold">บันทึก</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 5: SETTINGS, CATEGORY & PRODUCT MANAGER ==================== -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-xl rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 class="text-lg font-extrabold text-slate-800">⚙️ ตั้งค่าร้าน หมวดหมู่ & สินค้า</h3>
+                <button onclick="closeModal('settingsModal')" class="p-1.5 rounded-full bg-slate-100 text-slate-500">✕</button>
+            </div>
+
+            <!-- Cloud Sync Shortcut inside Settings -->
+            <div class="mt-4 bg-sky-50 border border-sky-200 rounded-2xl p-3 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-[#1454A6]">☁️ ระบบซิงก์ออนไลน์หลายเครื่อง (Firebase)</p>
+                    <p id="settingsCloudSummary" class="text-[11px] text-slate-600 mt-0.5">ยังไม่ได้เชื่อมต่อ (โหมดออฟไลน์)</p>
+                </div>
+                <button onclick="closeModal('settingsModal'); openCloudSetupModal();" class="btn-press bg-[#1454A6] text-white text-xs font-bold px-3 py-2 rounded-xl">ตั้งค่า</button>
+            </div>
+
+            <!-- PromptPay Setting -->
+            <details class="mt-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/70">
+                <summary class="cursor-pointer text-xs font-bold text-[#1454A6] flex items-center justify-between list-none">
+                    <span>📱 ข้อมูลบัญชี PromptPay QR ร้าน</span>
+                    <span class="text-slate-400">▼</span>
+                </summary>
+                <div class="space-y-2.5 mt-3 pt-2.5 border-t border-slate-200/70">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">เบอร์มือถือ (10 หลัก) / เลขบัตรปชช. (13 หลัก) / e-Wallet (15 หลัก)</label>
+                        <input type="text" id="promptpayIdInput" placeholder="เช่น 004999205349524" class="font-num w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">ชื่อบัญชีที่แสดงใต้ QR</label>
+                        <input type="text" id="promptpayNameInput" placeholder="เช่น น.ส. จิณัฐชิสา ซาโนะ" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">เลขที่บัญชีแสดงบนหน้าจอ (ไม่บังคับ)</label>
+                        <input type="text" id="promptpayAccountMaskInput" placeholder="เช่น xxx-x-x5466-x" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm">
+                    </div>
+                </div>
+            </details>
+
+            <!-- SECTION A: CUSTOM CATEGORY & SVG ICON BUILDER -->
+            <div class="mt-4 bg-indigo-50/60 border border-indigo-200/80 rounded-2xl p-3.5">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <p class="text-xs font-extrabold text-indigo-950">🎨 หมวดหมู่สินค้า & ภาพกราฟิกการ์ด</p>
+                        <p class="text-[11px] text-indigo-800/75">เพิ่มหมวดใหม่ได้เอง (เช่น ค็อกเทล, เฟรนช์ฟรายส์, คอร์นชีส)</p>
+                    </div>
+                    <button type="button" onclick="openCategoryEditorModal()" class="btn-press text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-xl shadow-2xs shrink-0">+ เพิ่มหมวดหมู่</button>
+                </div>
+                <div id="categoryConfigList" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                    <!-- Category cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- SECTION B: PRODUCT MENU EDITOR -->
+            <div class="mt-4">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-xs font-extrabold text-slate-700">🍻 รายการสินค้า / โปรโมชั่น (แตะ 📷 รูป เพื่ออัปรูปเมนู)</p>
+                    <button type="button" onclick="addProductRow()" class="btn-press text-xs font-bold text-[#1454A6] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-xl">+ เพิ่มเมนู</button>
+                </div>
+                <div id="productConfigList" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    <!-- Product edit rows injected by JS -->
+                </div>
+            </div>
+
+            <!-- Save & Danger Zone -->
+            <div class="mt-5 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                <button id="btnResetAllData" onclick="confirmResetAllData()" class="hidden text-xs font-bold text-rose-500 hover:bg-rose-50 px-3 py-2 rounded-xl">🗑️ ล้างข้อมูลทั้งหมด (เจ้าของร้าน)</button>
+                <button onclick="saveSettings()" class="btn-press bg-[#1454A6] hover:bg-[#0F4387] text-white font-bold text-sm px-6 py-2.5 rounded-2xl shadow ml-auto">💾 บันทึกการตั้งค่า</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 5.5: ADD / EDIT CATEGORY & SVG GRAPHIC PICKER ==================== -->
+    <div id="categoryEditorModal" class="hidden fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 id="catEditorTitle" class="text-lg font-extrabold text-slate-800">🎨 สร้างหมวดหมู่ & เลือกภาพกราฟิก</h3>
+                <button onclick="closeModal('categoryEditorModal')" class="p-1.5 rounded-full bg-slate-100 text-slate-500">✕</button>
+            </div>
+
+            <div class="space-y-3.5 mt-3.5">
+                <input type="hidden" id="catEditIdInput">
+                
+                <div class="grid grid-cols-12 gap-2.5">
+                    <div class="col-span-3">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">อีโมจิแท็บ</label>
+                        <input type="text" id="catEmojiInput" maxlength="4" placeholder="🍹" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg">
+                    </div>
+                    <div class="col-span-9">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">ชื่อหมวดหมู่ (เช่น ค็อกเทล / ของทานเล่น)</label>
+                        <input type="text" id="catLabelInput" placeholder="เช่น ค็อกเทล" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">หน่วยนับ (เช่น แก้ว, จาน, ถ้วย)</label>
+                        <input type="text" id="catUnitInput" placeholder="แก้ว" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">การตัดสต็อกเครื่องดื่มกระป๋อง</label>
+                        <select id="catDeductCanInput" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold">
+                            <option value="false">❌ ไม่ตัดสต็อกกระป๋อง (อาหาร/ของที่ระลึก)</option>
+                            <option value="true">✅ ตัดสต็อกเครื่องดื่มกระป๋อง</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Visual SVG Graphic Picker Grid -->
+                <div>
+                    <label class="block text-xs font-extrabold text-slate-700 mb-1.5">🖼️ เลือกภาพกราฟิกบนการ์ดสินค้า:</label>
+                    <input type="hidden" id="catGraphicKeyInput" value="cocktail">
+                    <div id="svgGraphicPickerGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-56 overflow-y-auto p-1 bg-slate-50 rounded-2xl border border-slate-200/80">
+                        <!-- Graphic options injected by JS -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('categoryEditorModal')" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">ยกเลิก</button>
+                    <button type="button" onclick="saveCategoryItem()" class="btn-press px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow">บันทึกหมวดหมู่</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 6: CLOUD SYNC SETUP (FIREBASE) ==================== -->
+    <div id="cloudSetupModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 class="text-lg font-extrabold text-slate-800">☁️ เชื่อมต่อออนไลน์ (Firebase)</h3>
+                <button onclick="closeModal('cloudSetupModal')" class="p-1.5 rounded-full bg-slate-100 text-slate-500">✕</button>
+            </div>
+
+            <div class="mt-3 space-y-3 text-xs text-slate-600">
+                <p class="leading-relaxed">เชื่อมต่อกับ <strong>Firebase Realtime Database</strong> ฟรี เพื่อให้ยอดขายและสต็อกจากทุกบูธ/ทุกเครื่องอัปเดตมารวมกันแบบเรียลไทม์</p>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Firebase Realtime Database URL:</label>
+                    <input type="url" id="firebaseUrlInput" placeholder="https://your-project-default-rtdb.firebaseio.com" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono focus:outline-none focus:border-[#1454A6]">
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="testFirebaseConnection()" class="btn-press flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs">
+                        🔌 ทดสอบการเชื่อมต่อ
+                    </button>
+                    <button type="button" onclick="saveFirebaseConfig()" class="btn-press flex-1 py-2.5 px-3 bg-[#0F9D58] hover:bg-[#0C854A] text-white font-bold rounded-xl text-xs shadow-2xs">
+                        💾 บันทึก & ซิงก์ทันที
+                    </button>
+                </div>
+
+                <div id="firebaseTestResult" class="hidden p-2.5 rounded-xl text-xs font-semibold"></div>
+
+                <!-- Step-by-step Quick Guide -->
+                <details class="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-3">
+                    <summary class="cursor-pointer font-bold text-[#1454A6] list-none flex items-center justify-between">
+                        <span>📖 วิธีสร้างลิงก์ Firebase ฟรี (ใช้เวลา 1 นาที)</span>
+                        <span>▼</span>
+                    </summary>
+                    <ol class="list-decimal list-inside space-y-1.5 mt-2.5 text-[11px] text-slate-700 leading-relaxed">
+                        <li>ไปที่ <strong>console.firebase.google.com</strong> และสร้างโปรเจกต์ใหม่</li>
+                        <li>เลือกเมนูซ้าย <strong>Build > Realtime Database</strong> กด <strong>Create Database</strong></li>
+                        <li>เลือกโหมด <strong>Start in test mode</strong> (อนุญาตให้อ่าน/เขียนข้อมูล)</li>
+                        <li>คัดลอกลิงก์ URL ด้านบนสุด (เช่น <code>https://xxx.firebaseio.com</code>) มาวางในช่องด้านบน แล้วกดบันทึก</li>
+                        <li>กดปุ่ม <strong>ดาวน์โหลดไฟล์แอป POS (.html)</strong> ในหน้าหลังบ้านส่งให้บูธอื่นเปิดใช้งานได้เลย!</li>
+                    </ol>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 7: ADMIN PIN UNLOCK / CHANGE ==================== -->
+    <div id="adminPinModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl">
+            <h3 id="adminPinModalTitle" class="text-lg font-extrabold text-slate-800 mb-1">🔓 ปลดล็อกเจ้าของร้าน (Admin PIN)</h3>
+            <p id="adminPinModalDesc" class="text-xs text-slate-500 mb-3">กรุณากรอกรหัสผ่าน Admin PIN เพื่อดูยอดขายรวมทุกสาขา/ทุกบูธ</p>
+            <input type="password" inputmode="numeric" maxlength="8" id="adminPinInput" placeholder="กรอกรหัส PIN..." class="font-num w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-extrabold text-center tracking-widest focus:outline-none focus:border-[#1454A6]">
+            <div class="flex justify-end gap-2 mt-4">
+                <button onclick="closeModal('adminPinModal')" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">ยกเลิก</button>
+                <button id="adminPinSubmitBtn" onclick="submitAdminPin()" class="btn-press px-5 py-2 rounded-xl bg-[#1454A6] text-white text-xs font-bold">ปลดล็อก</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== CUSTOM TOAST / CONFIRM DIALOG ==================== -->
+    <div id="toastNotification" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-[70] bg-slate-900/95 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg transition-opacity">
+        แจ้งเตือน
+    </div>
+
+    <div id="customDialogModal" class="hidden fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-xs rounded-3xl p-5 shadow-2xl text-center">
+            <p id="dialogMessage" class="text-sm font-bold text-slate-800 mb-4">ยืนยันรายการ?</p>
+            <div class="flex justify-center gap-2">
+                <button id="dialogCancelBtn" onclick="closeModal('customDialogModal')" class="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">ยกเลิก</button>
+                <button id="dialogConfirmBtn" class="flex-1 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== JAVASCRIPT LOGIC ==================== -->
+    <script>
+        // ---------------------------------------------------------
+        // 1. EMBEDDED DEFAULT CONFIG (Updated automatically on HTML Export)
+        // ---------------------------------------------------------
+        const EMBEDDED_POS_CONFIG = {
+            firebaseUrl: "https://shibuya-highball-pos-d39b6-default-rtdb.asia-southeast1.firebasedatabase.app",
+            adminPin: "1234",
+            promptpayId: "004999205349524",
+            promptpayName: "น.ส. จิณัฐชิสา ซาโนะ",
+            promptpayAccountMask: "xxx-x-x5466-x",
+            startingCash: 0,
+            categories: null,
+            products: null
+        };
+
+        // ---------------------------------------------------------
+        // 2. SOUND EFFECTS ENGINE (Web Audio API - Zero External URLs)
+        // ---------------------------------------------------------
+        let audioCtx = null;
+        function getAudioContext() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) audioCtx = new AudioContext();
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        function playTapSound() {
+            if (!appState.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(620, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.08, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.055);
+            } catch (e) {}
+        }
+
+        function playSuccessSound() {
+            if (!appState.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+                const notes = [587.33, 880];
+                notes.forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    const start = ctx.currentTime + (idx * 0.09);
+                    osc.frequency.setValueAtTime(freq, start);
+                    gain.gain.setValueAtTime(0.14, start);
+                    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.25);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(start);
+                    osc.stop(start + 0.26);
+                });
+            } catch (e) {}
+        }
+
+        // ---------------------------------------------------------
+        // 3. THAI PROMPTPAY EMVCo QR GENERATOR (CRC16-CCITT)
+        // ---------------------------------------------------------
+        function crc16CCITT(str) {
+            let crc = 0xFFFF;
+            for (let i = 0; i < str.length; i++) {
+                crc ^= str.charCodeAt(i) << 8;
+                for (let j = 0; j < 8; j++) {
+                    if ((crc & 0x8000) !== 0) {
+                        crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+                    } else {
+                        crc = (crc << 1) & 0xFFFF;
+                    }
+                }
+            }
+            return crc.toString(16).toUpperCase().padStart(4, '0');
+        }
+
+        function formatTLV(tag, value) {
+            const len = value.length.toString().padStart(2, '0');
+            return `${tag}${len}${value}`;
+        }
+
+        function generatePromptPayPayload(targetId, amount) {
+            const cleanId = (targetId || '').replace(/[^0-9]/g, '');
+            if (!cleanId) return '';
+
+            let accountTag = '';
+            if (cleanId.length === 15) {
+                accountTag = formatTLV('03', cleanId);
+            } else if (cleanId.length === 13) {
+                accountTag = formatTLV('02', cleanId);
+            } else {
+                let mobile = cleanId;
+                if (mobile.startsWith('0')) {
+                    mobile = '0066' + mobile.substring(1);
+                } else if (!mobile.startsWith('0066')) {
+                    mobile = '0066' + mobile;
+                }
+                accountTag = formatTLV('01', mobile);
+            }
+
+            const merchantInfo = formatTLV('29', formatTLV('00', 'A000000677010111') + accountTag);
+            let payload = '';
+            payload += formatTLV('00', '01');
+            payload += formatTLV('01', amount > 0 ? '12' : '11');
+            payload += merchantInfo;
+            payload += formatTLV('53', '764');
+            if (amount > 0) {
+                payload += formatTLV('54', Number(amount).toFixed(2));
+            }
+            payload += formatTLV('58', 'TH');
+            payload += '6304';
+            return payload + crc16CCITT(payload);
+        }
+
+        // ---------------------------------------------------------
+        // 4. BUILT-IN SVG GRAPHIC LIBRARY & DYNAMIC CATEGORIES
+        // ---------------------------------------------------------
+        const SVG_GRAPHIC_LIBRARY = [
+            { key: 'drink',          label: 'กระป๋อง / ถาด',       emoji: '🥤' },
+            { key: 'cocktail',       label: 'ค็อกเทล (Cocktail)',   emoji: '🍹' },
+            { key: 'highball_glass', label: 'แก้วไฮบอลชงสด',       emoji: '🥃' },
+            { key: 'fries',          label: 'เฟรนช์ฟรายส์',         emoji: '🍟' },
+            { key: 'corn',           label: 'คอร์นชีส / ข้าวโพดอบ', emoji: '🌽' },
+            { key: 'fried_snack',    label: 'ของทอด / ไก่ทอด',      emoji: '🍗' },
+            { key: 'skewer',         label: 'คอร์นด็อก / เสียบไม้',  emoji: '🌭' },
+            { key: 'bar_snack',      label: 'กับแกล้ม / ขนม',       emoji: '🥜' },
+            { key: 'tasting',        label: 'ของแจก / ชิมฟรี',      emoji: '🎁' },
+            { key: 'shirt',          label: 'เสื้อยืด',             emoji: '👕' },
+            { key: 'inhaler',        label: 'ยาดม',                 emoji: '🌿' },
+            { key: 'tumbler',        label: 'แก้วเก็บความเย็น',     emoji: '🧊' },
+            { key: 'merch_bag',      label: 'ของที่ระลึก / ทั่วไป', emoji: '🛍️' }
+        ];
+
+        const DEFAULT_CATEGORIES = [
+            { id: 'drink',   emoji: '🥤', label: 'เครื่องดื่ม',      unit: 'กระป๋อง', graphic: 'drink',   deductCans: true,  badgeBg: 'bg-sky-100 text-[#1454A6]',      cardBg: 'bg-sky-50/70 border-sky-200/70 text-[#1454A6]' },
+            { id: 'tasting', emoji: '🎁', label: 'แจก / ชิมฟรี',   unit: 'กระป๋อง', graphic: 'tasting', deductCans: true,  badgeBg: 'bg-amber-100 text-amber-800',    cardBg: 'bg-amber-50/70 border-amber-200/70 text-amber-800' },
+            { id: 'shirt',   emoji: '👕', label: 'เสื้อยืด',         unit: 'ตัว',     graphic: 'shirt',   deductCans: false, badgeBg: 'bg-indigo-100 text-indigo-700',  cardBg: 'bg-indigo-50/70 border-indigo-200/70 text-indigo-700' },
+            { id: 'inhaler', emoji: '🌿', label: 'ยาดม',             unit: 'อัน',     graphic: 'inhaler', deductCans: false, badgeBg: 'bg-emerald-100 text-emerald-700',cardBg: 'bg-emerald-50/70 border-emerald-200/70 text-emerald-700' },
+            { id: 'tumbler', emoji: '🧊', label: 'แก้วเก็บความเย็น', unit: 'ใบ',      graphic: 'tumbler', deductCans: false, badgeBg: 'bg-amber-100 text-amber-800',    cardBg: 'bg-amber-50/70 border-amber-200/70 text-amber-700' }
+        ];
+
+        const CUSTOM_COLOR_PALETTE = [
+            { badgeBg: 'bg-rose-100 text-rose-700',       cardBg: 'bg-rose-50/70 border-rose-200/70 text-rose-700' },
+            { badgeBg: 'bg-orange-100 text-orange-700',   cardBg: 'bg-orange-50/70 border-orange-200/70 text-orange-700' },
+            { badgeBg: 'bg-purple-100 text-purple-700',   cardBg: 'bg-purple-50/70 border-purple-200/70 text-purple-700' },
+            { badgeBg: 'bg-teal-100 text-teal-700',       cardBg: 'bg-teal-50/70 border-teal-200/70 text-teal-700' },
+            { badgeBg: 'bg-pink-100 text-pink-700',       cardBg: 'bg-pink-50/70 border-pink-200/70 text-pink-700' }
+        ];
+
+        function getCategoryMeta(catId) {
+            const list = Array.isArray(appState.categories) && appState.categories.length > 0 ? appState.categories : DEFAULT_CATEGORIES;
+            return list.find(c => c.id === catId) || list[0] || DEFAULT_CATEGORIES[0];
+        }
+
+        function isDrinkStockCategory(catId) {
+            const meta = getCategoryMeta(catId);
+            return Boolean(meta.deductCans);
+        }
+
+        // ---------------------------------------------------------
+        // 5. STATE, LOCALSTORAGE & FIREBASE SYNC
+        // ---------------------------------------------------------
+        const STORAGE_KEY = 'shibuya_highball_pos_customcat_v4';
+
+        const DEFAULT_PRODUCTS = [
+            { id: 'p1',     category: 'drink',   name: '1 CAN (1 กระป๋อง)',               cans: 1,  price: 89,   active: true },
+            { id: 'p2',     category: 'drink',   name: '3 CANS (3 กระป๋อง)',              cans: 3,  price: 250,  active: true },
+            { id: 'p3',     category: 'drink',   name: '6 CANS + FREE ยาดม 1 อัน',        cans: 6,  price: 530,  active: true, bonusItems: [{ category: 'inhaler', qty: 1, label: 'ยาดม' }] },
+            { id: 'p4',     category: 'drink',   name: '1 TRAY (12 กระป๋อง)',             cans: 12, price: 840,  active: true },
+            { id: 'p5',     category: 'drink',   name: '2 TRAY (24 กป.) + FREE เสื้อ 1 ตัว', cans: 24, price: 1680, active: true, bonusItems: [{ category: 'shirt', qty: 1, label: 'เสื้อยืด' }] },
+            { id: 'p_free', category: 'tasting', name: 'แจก / ชิมฟรี (1 กป.)',            cans: 1,  price: 0,    active: true },
+            { id: 'p6',     category: 'shirt',   name: 'เสื้อยืด Shibuya Highball',       cans: 1,  price: 390,  active: true },
+            { id: 'p7',     category: 'inhaler', name: 'ยาดมกระปุก Shibuya',             cans: 1,  price: 69,   active: true },
+            { id: 'p8',     category: 'tumbler', name: 'แก้วเก็บความเย็น Shibuya',        cans: 1,  price: 450,  active: true }
+        ];
+
+        const CANS_PER_TRAY = 12;
+
+        let appState = {
+            branchName: '',
+            soundEnabled: true,
+            startingCash: EMBEDDED_POS_CONFIG.startingCash !== undefined ? Number(EMBEDDED_POS_CONFIG.startingCash) : 0,
+            promptpayId: EMBEDDED_POS_CONFIG.promptpayId || '004999205349524',
+            promptpayName: EMBEDDED_POS_CONFIG.promptpayName || 'น.ส. จิณัฐชิสา ซาโนะ',
+            promptpayAccountMask: EMBEDDED_POS_CONFIG.promptpayAccountMask || 'xxx-x-x5466-x',
+            firebaseUrl: EMBEDDED_POS_CONFIG.firebaseUrl || '',
+            adminPin: EMBEDDED_POS_CONFIG.adminPin || '1234',
+            categories: JSON.parse(JSON.stringify(Array.isArray(EMBEDDED_POS_CONFIG.categories) && EMBEDDED_POS_CONFIG.categories.length > 0 ? EMBEDDED_POS_CONFIG.categories : DEFAULT_CATEGORIES)),
+            products: JSON.parse(JSON.stringify(Array.isArray(EMBEDDED_POS_CONFIG.products) && EMBEDDED_POS_CONFIG.products.length > 0 ? EMBEDDED_POS_CONFIG.products : DEFAULT_PRODUCTS)),
+            cart: [],
+            salesHistory: [],
+            stockLogs: []
+        };
+
+        let isOwnerUnlocked = false;
+        let pinModalMode = 'unlock';
+        let saleCategoryFilter = 'all';
+        let currentPaymentType = 'cash';
+        let currentQrMode = 'full';
+        let isCartDrawerOpen = false;
+        let cloudSyncInterval = null;
+        let lastCloudSyncTime = null;
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('shibuya_highball_pos_multicat_v3');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    appState = { ...appState, ...parsed };
+                    if (!appState.firebaseUrl && EMBEDDED_POS_CONFIG.firebaseUrl) {
+                        appState.firebaseUrl = EMBEDDED_POS_CONFIG.firebaseUrl;
+                    }
+                    if (!appState.adminPin) {
+                        appState.adminPin = EMBEDDED_POS_CONFIG.adminPin || '1234';
+                    }
+                    if (!Array.isArray(appState.categories) || appState.categories.length === 0) {
+                        appState.categories = JSON.parse(JSON.stringify(Array.isArray(EMBEDDED_POS_CONFIG.categories) && EMBEDDED_POS_CONFIG.categories.length > 0 ? EMBEDDED_POS_CONFIG.categories : DEFAULT_CATEGORIES));
+                    }
+                    if (!Array.isArray(appState.products) || appState.products.length === 0) {
+                        appState.products = JSON.parse(JSON.stringify(Array.isArray(EMBEDDED_POS_CONFIG.products) && EMBEDDED_POS_CONFIG.products.length > 0 ? EMBEDDED_POS_CONFIG.products : DEFAULT_PRODUCTS));
+                    } else {
+                        appState.products = appState.products.map(p => ({
+                            ...p,
+                            category: p.category || 'drink'
+                        }));
+                    }
+                    if (!Array.isArray(appState.cart)) appState.cart = [];
+                    if (!Array.isArray(appState.salesHistory)) appState.salesHistory = [];
+                    if (!Array.isArray(appState.stockLogs)) appState.stockLogs = [];
+                }
+            } catch (e) {
+                console.error('Load state failed:', e);
+            }
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (e) {
+                console.error('Save state failed:', e);
+            }
+        }
+
+        // --- FIREBASE REALTIME SYNC ENGINE ---
+        function cleanFirebaseBaseUrl(url) {
+            if (!url) return '';
+            let clean = url.trim().replace(/\/+$/, '');
+            if (clean && !clean.startsWith('http')) clean = 'https://' + clean;
+            return clean;
+        }
+
+        function updateCloudIndicator(status, label) {
+            const dot = document.getElementById('cloudStatusDot');
+            const txt = document.getElementById('cloudStatusText');
+            const adminBadge = document.getElementById('cloudBadgeAdmin');
+            if (!dot || !txt) return;
+
+            dot.classList.remove('bg-slate-300', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400', 'sync-pulse');
+            if (status === 'connected') {
+                dot.classList.add('bg-emerald-400');
+                txt.textContent = label || 'ออนไลน์';
+                if (adminBadge) {
+                    adminBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800';
+                    adminBadge.textContent = '☁️ ซิงก์ออนไลน์แล้ว';
+                }
+            } else if (status === 'syncing') {
+                dot.classList.add('bg-amber-400', 'sync-pulse');
+                txt.textContent = 'กำลังซิงก์...';
+            } else if (status === 'error') {
+                dot.classList.add('bg-rose-400');
+                txt.textContent = 'ซิงก์ขัดข้อง';
+                if (adminBadge) {
+                    adminBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700';
+                    adminBadge.textContent = '⚠️ ออฟไลน์ชั่วคราว';
+                }
+            } else {
+                dot.classList.add('bg-slate-300');
+                txt.textContent = 'ออฟไลน์';
+                if (adminBadge) {
+                    adminBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600';
+                    adminBadge.textContent = 'โหมดออฟไลน์';
+                }
+            }
+        }
+
+        async function pushSaleToFirebase(saleObj) {
+            const base = cleanFirebaseBaseUrl(appState.firebaseUrl);
+            if (!base) return;
+            try {
+                updateCloudIndicator('syncing');
+                const res = await fetch(`${base}/sales/${saleObj.id}.json`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(saleObj)
+                });
+                if (res.ok) {
+                    saleObj.synced = true;
+                    saveState();
+                    updateCloudIndicator('connected');
+                } else {
+                    updateCloudIndicator('error');
+                }
+            } catch (e) {
+                updateCloudIndicator('error');
+            }
+        }
+
+        async function pushStockToFirebase(stockObj) {
+            const base = cleanFirebaseBaseUrl(appState.firebaseUrl);
+            if (!base) return;
+            try {
+                updateCloudIndicator('syncing');
+                const res = await fetch(`${base}/stockLogs/${stockObj.id}.json`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(stockObj)
+                });
+                if (res.ok) {
+                    stockObj.synced = true;
+                    saveState();
+                    updateCloudIndicator('connected');
+                } else {
+                    updateCloudIndicator('error');
+                }
+            } catch (e) {
+                updateCloudIndicator('error');
+            }
+        }
+
+        async function syncAllWithFirebase(silent = true) {
+            const base = cleanFirebaseBaseUrl(appState.firebaseUrl);
+            if (!base) {
+                updateCloudIndicator('offline');
+                return;
+            }
+            try {
+                if (!silent) updateCloudIndicator('syncing');
+
+                for (const s of appState.salesHistory) {
+                    if (!s.synced) {
+                        await fetch(`${base}/sales/${s.id}.json`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ...s, synced: true })
+                        });
+                        s.synced = true;
+                    }
+                }
+                for (const l of appState.stockLogs) {
+                    if (!l.synced) {
+                        await fetch(`${base}/stockLogs/${l.id}.json`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ...l, synced: true })
+                        });
+                        l.synced = true;
+                    }
+                }
+
+                const [salesRes, stockRes] = await Promise.all([
+                    fetch(`${base}/sales.json`),
+                    fetch(`${base}/stockLogs.json`)
+                ]);
+
+                if (!salesRes.ok || !stockRes.ok) {
+                    updateCloudIndicator('error');
+                    return;
+                }
+
+                const remoteSalesObj = await salesRes.json();
+                const remoteStockObj = await stockRes.json();
+
+                let changed = false;
+
+                if (remoteSalesObj && typeof remoteSalesObj === 'object') {
+                    const localMap = new Map(appState.salesHistory.map(item => [String(item.id), item]));
+                    Object.values(remoteSalesObj).forEach(rItem => {
+                        if (!rItem || !rItem.id) return;
+                        const existing = localMap.get(String(rItem.id));
+                        if (!existing) {
+                            localMap.set(String(rItem.id), { ...rItem, synced: true });
+                            changed = true;
+                        } else if (rItem.voided && !existing.voided) {
+                            existing.voided = true;
+                            existing.synced = true;
+                            changed = true;
+                        }
+                    });
+                    appState.salesHistory = Array.from(localMap.values()).sort((a, b) => Number(b.id) - Number(a.id));
+                }
+
+                if (remoteStockObj && typeof remoteStockObj === 'object') {
+                    const stockMap = new Map(appState.stockLogs.map(item => [String(item.id), item]));
+                    Object.values(remoteStockObj).forEach(rLog => {
+                        if (!rLog || !rLog.id) return;
+                        if (!stockMap.has(String(rLog.id))) {
+                            stockMap.set(String(rLog.id), { ...rLog, synced: true });
+                            changed = true;
+                        }
+                    });
+                    appState.stockLogs = Array.from(stockMap.values()).sort((a, b) => Number(b.id) - Number(a.id));
+                }
+
+                saveState();
+                lastCloudSyncTime = new Date();
+                updateCloudIndicator('connected');
+
+                if (changed || !silent) {
+                    updateQuickStockBadge();
+                    if (!document.getElementById('adminView').classList.contains('hidden')) {
+                        renderAdminDashboard();
+                    }
+                }
+            } catch (e) {
+                updateCloudIndicator('error');
+            }
+        }
+
+        function startCloudSyncLoop() {
+            if (cloudSyncInterval) clearInterval(cloudSyncInterval);
+            if (cleanFirebaseBaseUrl(appState.firebaseUrl)) {
+                syncAllWithFirebase(true);
+                cloudSyncInterval = setInterval(() => syncAllWithFirebase(true), 12000);
+            } else {
+                updateCloudIndicator('offline');
+            }
+        }
+
+        // ---------------------------------------------------------
+        // 6. CUSTOM SVG ILLUSTRATIONS FOR ALL GRAPHIC KEYS
+        // ---------------------------------------------------------
+        function getGraphicIllustrationSVG(graphicKey, qty = 1, bonusItems = []) {
+            const key = graphicKey || 'drink';
+            const count = Math.max(1, parseInt(qty) || 1);
+            const hasBonusInhaler = Array.isArray(bonusItems) && bonusItems.some(b => b.category === 'inhaler');
+            const hasBonusShirt = Array.isArray(bonusItems) && bonusItems.some(b => b.category === 'shirt');
+
+            // --- COCKTAIL (ค็อกเทล) ---
+            if (key === 'cocktail') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="24" fill="#FFF1F2"/>
+                        <circle cx="45" cy="14" r="6" fill="#FACC15" stroke="#F59E0B" stroke-width="1.3"/>
+                        <line x1="45" y1="8" x2="45" y2="20" stroke="#F59E0B" stroke-width="1"/>
+                        <line x1="38" y1="6" x2="33" y2="24" stroke="#E11D48" stroke-width="2.2" stroke-linecap="round"/>
+                        <path d="M18 16 L50 16 L35.5 33 L35.5 45 L43 45 C44 45 44.5 47.5 43 47.5 L25 47.5 C23.5 47.5 24 45 25 45 L32.5 45 L32.5 33 Z" fill="#E0F2FE" stroke="#0284C7" stroke-width="1.5" stroke-linejoin="round"/>
+                        <path d="M21.5 20 L46.5 20 L34 33.5 Z" fill="#FB7185"/>
+                        <circle cx="31" cy="24" r="2" fill="#FFFFFF" opacity="0.85"/>
+                        <circle cx="37" cy="26" r="1.5" fill="#FFFFFF" opacity="0.85"/>
+                    </svg>
+                `;
+            }
+
+            // --- HIGHBALL GLASS (แก้วไฮบอลชงสด) ---
+            if (key === 'highball_glass') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="24" fill="#FEFCE8"/>
+                        <circle cx="43" cy="15" r="6" fill="#FDE047" stroke="#EAB308" stroke-width="1.4"/>
+                        <rect x="23" y="13" width="22" height="35" rx="3" fill="#E0F2FE" stroke="#0284C7" stroke-width="1.6"/>
+                        <rect x="24.5" y="20" width="19" height="26.5" rx="1.5" fill="#FACC15"/>
+                        <rect x="27" y="22" width="6" height="6" rx="1.2" fill="#FFFFFF" opacity="0.85"/>
+                        <rect x="35" y="25" width="6" height="6" rx="1.2" fill="#FFFFFF" opacity="0.85"/>
+                        <circle cx="30" cy="36" r="1.3" fill="#FFFFFF"/>
+                        <circle cx="38" cy="39" r="1.5" fill="#FFFFFF"/>
+                        <line x1="39" y1="7" x2="35" y2="30" stroke="#1454A6" stroke-width="2.2" stroke-linecap="round"/>
+                    </svg>
+                `;
+            }
+
+            // --- FRENCH FRIES (เฟรนช์ฟรายส์) ---
+            if (key === 'fries') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="24" fill="#FEF9C3"/>
+                        <rect x="22" y="9" width="4" height="18" rx="1.5" fill="#FACC15" stroke="#CA8A04" stroke-width="0.9" transform="rotate(-10 24 18)"/>
+                        <rect x="28" y="7" width="4.2" height="20" rx="1.5" fill="#FDE047" stroke="#CA8A04" stroke-width="0.9" transform="rotate(-3 30 17)"/>
+                        <rect x="34" y="6" width="4.2" height="21" rx="1.5" fill="#FACC15" stroke="#CA8A04" stroke-width="0.9" transform="rotate(4 36 17)"/>
+                        <rect x="40" y="9" width="4" height="18" rx="1.5" fill="#FDE047" stroke="#CA8A04" stroke-width="0.9" transform="rotate(11 42 18)"/>
+                        <path d="M19 21 C26 25 42 25 49 21 L45 46 C44.6 47.8 43.2 49 41.4 49 L26.6 49 C24.8 49 23.4 47.8 23 46 Z" fill="#DC2626"/>
+                        <path d="M23 23 C28 26 40 26 45 23 L44 27 C39 29.5 29 29.5 24 27 Z" fill="#FACC15"/>
+                        <circle cx="34" cy="37" r="4" fill="#FACC15"/>
+                    </svg>
+                `;
+            }
+
+            // --- BAKED CORN / CORN CHEESE (คอร์นชีส / ข้าวโพดอบ) ---
+            if (key === 'corn') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="24" fill="#FFFBEB"/>
+                        <path d="M26 14 Q24 10 27 7" fill="none" stroke="#F59E0B" stroke-width="1.6" stroke-linecap="round"/>
+                        <path d="M34 12 Q32 8 35 5" fill="none" stroke="#F59E0B" stroke-width="1.6" stroke-linecap="round"/>
+                        <path d="M42 14 Q40 10 43 7" fill="none" stroke="#F59E0B" stroke-width="1.6" stroke-linecap="round"/>
+                        <ellipse cx="34" cy="25" rx="17" ry="8" fill="#FACC15" stroke="#D97706" stroke-width="1.4"/>
+                        <circle cx="28" cy="24" r="2.3" fill="#FEF08A"/>
+                        <circle cx="34" cy="23" r="2.5" fill="#FEF08A"/>
+                        <circle cx="40" cy="24" r="2.3" fill="#FEF08A"/>
+                        <circle cx="31" cy="27" r="2.2" fill="#FDE047"/>
+                        <circle cx="37" cy="27" r="2.2" fill="#FDE047"/>
+                        <rect x="32" y="21" width="4" height="2.5" rx="0.8" fill="#16A34A"/>
+                        <path d="M16 25 L52 25 L47 43 C46.2 46 43.8 48 40.8 48 L27.2 48 C24.2 48 21.8 46 21 43 Z" fill="#1E293B"/>
+                        <rect x="14" y="24" width="40" height="3.5" rx="1.75" fill="#334155"/>
+                    </svg>
+                `;
+            }
+
+            // --- FRIED SNACKS / CHICKEN / NUGGETS (ของทอด / ไก่ทอด) ---
+            if (key === 'fried_snack') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="24" fill="#FFEDD5"/>
+                        <g transform="rotate(-22 34 28)">
+                            <rect x="36" y="25" width="16" height="6" rx="3" fill="#FEF3C7" stroke="#D97706" stroke-width="1.3"/>
+                            <circle cx="52" cy="26" r="2.8" fill="#FEF3C7"/>
+                            <circle cx="52" cy="30" r="2.8" fill="#FEF3C7"/>
+                            <path d="M16 28 C16 19 25 16 34 19 C39 21 41 24 41 28 C41 32 39 35 34 37 C25 40 16 37 16 28 Z" fill="#D97706" stroke="#92400E" stroke-width="1.5"/>
+                            <circle cx="24" cy="25" r="1.5" fill="#FBBF24"/>
+                            <circle cx="30" cy="30" r="1.8" fill="#FBBF24"/>
+                            <circle cx="27" cy="22" r="1.2" fill="#FBBF24"/>
+                        </g>
+                    </svg>
+                `;
+            }
+
+            // --- SKEWER / CORN DOG (คอร์นด็อก / ของเสียบไม้) ---
+            if (key === 'skewer') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="24" fill="#FEE2E2"/>
+                        <g transform="rotate(-35 34 28)">
+                            <line x1="12" y1="28" x2="56" y2="28" stroke="#B45309" stroke-width="2.5" stroke-linecap="round"/>
+                            <rect x="20" y="20" width="26" height="16" rx="8" fill="#F59E0B" stroke="#B45309" stroke-width="1.4"/>
+                            <path d="M24 27 Q27 23 30 27 T36 27 T42 27" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
+                        </g>
+                    </svg>
+                `;
+            }
+
+            // --- BAR SNACKS / EDAMAME / NUTS (กับแกล้ม / ขนม) ---
+            if (key === 'bar_snack') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="24" fill="#DCFCE7"/>
+                        <ellipse cx="34" cy="26" rx="15" ry="7" fill="#16A34A"/>
+                        <circle cx="29" cy="25" r="3" fill="#4ADE80"/>
+                        <circle cx="35" cy="24" r="3" fill="#4ADE80"/>
+                        <circle cx="40" cy="26" r="2.8" fill="#4ADE80"/>
+                        <path d="M17 27 L51 27 L46 43 C45 45.5 42.8 47 40.2 47 L27.8 47 C25.2 47 23 45.5 22 43 Z" fill="#1E293B"/>
+                    </svg>
+                `;
+            }
+
+            // --- MERCH BAG / GENERAL ITEM (ของที่ระลึก / ทั่วไป) ---
+            if (key === 'merch_bag') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="24" fill="#F3E8FF"/>
+                        <path d="M26 19 C26 12 42 12 42 19" fill="none" stroke="#6D28D9" stroke-width="2.4" stroke-linecap="round"/>
+                        <path d="M19 19 L49 19 L51 45 C51.2 47 49.6 48.5 47.6 48.5 L20.4 48.5 C18.4 48.5 16.8 47 17 45 Z" fill="#7C3AED"/>
+                        <circle cx="34" cy="33" r="6" fill="#FACC15"/>
+                        <path d="M31 33 L33.5 35.5 L37.5 31" fill="none" stroke="#5B21B6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                `;
+            }
+
+            // --- TASTING / FREEBIE (แจก / ชิมฟรี) ---
+            if (key === 'tasting') {
+                return `
+                    <svg viewBox="0 0 68 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="34" cy="28" r="23" fill="#FEF3C7"/>
+                        <g transform="translate(22, 6)">
+                            <rect x="2" y="0" width="20" height="3" rx="1.5" fill="#CBD5E1"/>
+                            <rect x="0" y="3" width="24" height="36" rx="4" fill="#0EA5E9"/>
+                            <rect x="0" y="13" width="24" height="12" fill="#F59E0B"/>
+                            <circle cx="12" cy="19" r="3.5" fill="#FFFFFF" opacity="0.9"/>
+                            <rect x="2" y="39" width="20" height="2.5" rx="1" fill="#94A3B8"/>
+                        </g>
+                        <rect x="15" y="40" width="38" height="13" rx="6.5" fill="#F59E0B"/>
+                        <text x="34" y="49" text-anchor="middle" fill="#FFFFFF" font-size="7.5" font-weight="800" font-family="Inter, sans-serif">FREE</text>
+                    </svg>
+                `;
+            }
+
+            // --- DRINK (CANS & 12-CAN TRAY) ---
+            if (key === 'drink') {
+                if (count >= 12) {
+                    const trays = Math.round(count / 12);
+                    return `
+                        <svg viewBox="0 0 96 56" class="w-20 h-12 mx-auto drop-shadow-2xs">
+                            <rect x="8" y="8" width="12" height="24" rx="2.5" fill="#1D6CE0"/>
+                            <rect x="22" y="8" width="12" height="24" rx="2.5" fill="#3B82F6"/>
+                            <rect x="36" y="8" width="12" height="24" rx="2.5" fill="#0EA5E9"/>
+                            <rect x="50" y="8" width="12" height="24" rx="2.5" fill="#1D6CE0"/>
+                            <rect x="9" y="6" width="10" height="2.5" rx="1" fill="#CBD5E1"/>
+                            <rect x="23" y="6" width="10" height="2.5" rx="1" fill="#CBD5E1"/>
+                            <rect x="37" y="6" width="10" height="2.5" rx="1" fill="#CBD5E1"/>
+                            <rect x="51" y="6" width="10" height="2.5" rx="1" fill="#CBD5E1"/>
+                            <path d="M5 24 L65 24 L61 46 C60.5 48.5 58.5 50 56 50 L14 50 C11.5 50 9.5 48.5 9 46 Z" fill="#0F3E82"/>
+                            <rect x="5" y="22" width="60" height="4" rx="2" fill="#2563EB"/>
+                            <text x="35" y="40" text-anchor="middle" fill="#FFFFFF" font-size="8.5" font-weight="800" font-family="Inter, sans-serif">${trays} TRAY</text>
+                            ${hasBonusShirt ? `
+                                <g transform="translate(54, 4)">
+                                    <path d="M9 5 L15 2 L23 2 L29 5 L35 12 L30 16 L26 12 L26 30 L12 30 L12 12 L8 16 L3 12 Z" fill="#FFFFFF" stroke="#1454A6" stroke-width="1.8" stroke-linejoin="round"/>
+                                    <rect x="14" y="13" width="10" height="3" rx="1" fill="#1454A6"/>
+                                </g>
+                                <rect x="55" y="36" width="34" height="13" rx="6.5" fill="#F59E0B"/>
+                                <text x="72" y="45" text-anchor="middle" fill="#FFFFFF" font-size="7" font-weight="800" font-family="Inter, sans-serif">FREE</text>
+                            ` : ''}
+                        </svg>
+                    `;
+                }
+
+                const displayCans = Math.min(count, 6);
+                const canWidth = 14;
+                const spacing = displayCans > 3 ? 11 : 15;
+                const totalW = (displayCans - 1) * spacing + canWidth;
+                const startX = (92 - totalW) / 2;
+
+                let cansSvg = '';
+                for (let i = 0; i < displayCans; i++) {
+                    const x = startX + i * spacing;
+                    const yOffset = (i % 2 === 1 && displayCans > 2) ? 3 : 0;
+                    const fillMain = i % 2 === 0 ? '#1454A6' : '#1E74E8';
+                    cansSvg += `
+                        <g transform="translate(${x}, ${7 + yOffset})">
+                            <rect x="1.5" y="0" width="11" height="2.5" rx="1" fill="#CBD5E1"/>
+                            <rect x="0" y="2.5" width="14" height="32" rx="3" fill="${fillMain}"/>
+                            <rect x="0" y="10" width="14" height="11" fill="#FACC15"/>
+                            <circle cx="7" cy="15.5" r="2.8" fill="#1454A6"/>
+                            <rect x="1.5" y="34.5" width="11" height="2" rx="1" fill="#94A3B8"/>
+                        </g>
+                    `;
+                }
+
+                const bonusInhalerSvg = hasBonusInhaler ? `
+                    <g transform="translate(65, 9)">
+                        <rect x="1" y="0" width="16" height="6" rx="2" fill="#1D4ED8"/>
+                        <rect x="2" y="6" width="14" height="21" rx="2.5" fill="#38BDF8"/>
+                        <rect x="2" y="11" width="14" height="9" fill="#FFFFFF"/>
+                        <rect x="4" y="14" width="10" height="2.5" rx="1" fill="#1454A6"/>
+                    </g>
+                    <rect x="57" y="37" width="32" height="13" rx="6.5" fill="#F59E0B"/>
+                    <text x="73" y="46" text-anchor="middle" fill="#FFFFFF" font-size="7" font-weight="800" font-family="Inter, sans-serif">FREE</text>
+                ` : '';
+
+                return `<svg viewBox="0 0 92 54" class="w-20 h-12 mx-auto drop-shadow-2xs">${cansSvg}${bonusInhalerSvg}</svg>`;
+            }
+
+            // --- T-SHIRT (เสื้อยืด) ---
+            if (key === 'shirt') {
+                return `
+                    <svg viewBox="0 0 64 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="32" cy="28" r="24" fill="#EEF2FF"/>
+                        <path d="M18 14 L25 10 C27 13 37 13 39 10 L46 14 L54 22 L48 28 L43 23 L43 45 L21 45 L21 23 L16 28 L10 22 Z" fill="#1454A6" stroke="#0F3E82" stroke-width="1.5" stroke-linejoin="round"/>
+                        <path d="M25 10 C27 14 37 14 39 10" fill="none" stroke="#93C5FD" stroke-width="1.5"/>
+                        <rect x="26" y="23" width="12" height="3" rx="1.5" fill="#FACC15"/>
+                    </svg>
+                `;
+            }
+
+            // --- INHALER (ยาดม) ---
+            if (key === 'inhaler') {
+                return `
+                    <svg viewBox="0 0 64 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                        <circle cx="32" cy="28" r="24" fill="#ECFDF5"/>
+                        <rect x="23" y="9" width="18" height="8" rx="3" fill="#0F9D58"/>
+                        <line x1="26" y1="11" x2="26" y2="15" stroke="#A7F3D0" stroke-width="1.2"/>
+                        <line x1="30" y1="11" x2="30" y2="15" stroke="#A7F3D0" stroke-width="1.2"/>
+                        <line x1="34" y1="11" x2="34" y2="15" stroke="#A7F3D0" stroke-width="1.2"/>
+                        <line x1="38" y1="11" x2="38" y2="15" stroke="#A7F3D0" stroke-width="1.2"/>
+                        <rect x="24" y="17" width="16" height="27" rx="3" fill="#FFFFFF" stroke="#10B981" stroke-width="1.8"/>
+                        <rect x="24" y="24" width="16" height="12" fill="#10B981"/>
+                        <circle cx="32" cy="30" r="3" fill="#FACC15"/>
+                    </svg>
+                `;
+            }
+
+            // --- TUMBLER (แก้วเก็บความเย็น) ---
+            return `
+                <svg viewBox="0 0 64 56" class="w-16 h-12 mx-auto drop-shadow-2xs">
+                    <circle cx="32" cy="28" r="24" fill="#FEF3C7"/>
+                    <rect x="29" y="5" width="3.5" height="10" rx="1.5" fill="#F59E0B" transform="rotate(12 30 10)"/>
+                    <rect x="20" y="12" width="24" height="4" rx="2" fill="#94A3B8"/>
+                    <path d="M21 16 L43 16 L40 46 C39.8 47.5 38.5 48.5 37 48.5 L27 48.5 C25.5 48.5 24.2 47.5 24 46 Z" fill="#1E293B"/>
+                    <path d="M21.5 23 L42.5 23 L41.5 34 L22.5 34 Z" fill="#1454A6"/>
+                    <circle cx="32" cy="28.5" r="3.2" fill="#FACC15"/>
+                </svg>
+            `;
+        }
+
+        function renderSaleCategoryFilterBar() {
+            const bar = document.getElementById('saleCategoryFilterBar');
+            if (!bar) return;
+            const cats = appState.categories || DEFAULT_CATEGORIES;
+            if (saleCategoryFilter !== 'all' && !cats.some(c => c.id === saleCategoryFilter)) {
+                saleCategoryFilter = 'all';
+            }
+
+            let html = `
+                <button onclick="setSaleCategoryFilter('all')" class="btn-press px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition ${saleCategoryFilter === 'all' ? 'bg-[#1454A6] text-white shadow-2xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}">
+                    ทั้งหมด
+                </button>
+            `;
+            cats.forEach(c => {
+                const isActive = saleCategoryFilter === c.id;
+                html += `
+                    <button onclick="setSaleCategoryFilter('${c.id}')" class="btn-press px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition ${isActive ? 'bg-[#1454A6] text-white shadow-2xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}">
+                        ${c.emoji || '🏷️'} ${c.label}
+                    </button>
+                `;
+            });
+            bar.innerHTML = html;
+        }
+
+        function setSaleCategoryFilter(cat) {
+            playTapSound();
+            saleCategoryFilter = cat;
+            renderSaleCategoryFilterBar();
+            renderSaleProducts();
+        }
+
+        // ---------------------------------------------------------
+        // 7. UI RENDERING: SALE VIEW & CART
+        // ---------------------------------------------------------
+        function renderSaleProducts() {
+            renderSaleCategoryFilterBar();
+            const grid = document.getElementById('productGrid');
+            const activeProducts = appState.products.filter(p => {
+                if (!p.active) return false;
+                if (saleCategoryFilter === 'all') return true;
+                return (p.category || 'drink') === saleCategoryFilter;
+            });
+
+            if (activeProducts.length === 0) {
+                grid.innerHTML = `<div class="col-span-full text-center py-10 text-slate-400 text-sm">ไม่มีรายการสินค้าในหมวดหมู่นี้ (กด ⚙️ ตั้งค่าเพื่อเพิ่มเมนู)</div>`;
+                return;
+            }
+
+            grid.innerHTML = activeProducts.map(prod => {
+                const cat = prod.category || 'drink';
+                const meta = getCategoryMeta(cat);
+                const graphicKey = prod.graphic || meta.graphic || cat;
+                const cartItem = appState.cart.find(c => c.id === prod.id);
+                const qtyInCart = cartItem ? cartItem.qty : 0;
+                const isSelected = qtyInCart > 0;
+                const isTasting = cat === 'tasting' || prod.price === 0;
+                const borderClass = isSelected
+                    ? 'border-[#1454A6] ring-2 ring-[#1454A6]/20 bg-blue-50/30'
+                    : (isTasting ? 'border-amber-300 bg-amber-50/30 hover:border-amber-400' : 'border-slate-200/80 bg-white hover:border-blue-300');
+
+                return `
+                    <button onclick="addToCart('${prod.id}')" class="btn-press relative rounded-3xl p-4 border-2 ${borderClass} shadow-xs flex flex-col justify-between text-left transition-all min-h-[168px]">
+                        ${isSelected ? `
+                            <span class="font-num absolute -top-2.5 -right-2.5 bg-[#1454A6] text-white text-xs font-extrabold w-7 h-7 rounded-full flex items-center justify-center shadow-md border-2 border-white">
+                                ${qtyInCart}
+                            </span>
+                        ` : ''}
+
+                        <div class="w-full flex items-center justify-between gap-1">
+                            <span class="inline-block ${meta.badgeBg || 'bg-sky-100 text-[#1454A6]'} text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+                                ${prod.cans} ${meta.unit}
+                            </span>
+                        </div>
+
+                        <div class="my-2 w-full flex justify-center">
+                            ${prod.imageData
+                                ? `<img src="${prod.imageData}" alt="${prod.name}" class="w-16 h-14 object-cover rounded-2xl shadow-2xs border border-slate-200/80 mx-auto">`
+                                : getGraphicIllustrationSVG(graphicKey, prod.cans, prod.bonusItems)}
+                        </div>
+
+                        <div class="w-full text-center">
+                            <p class="font-bold text-slate-800 text-xs sm:text-sm leading-snug line-clamp-2">${prod.name}</p>
+                            <p class="font-num text-xl sm:text-2xl font-extrabold ${isTasting ? 'text-amber-600' : 'text-[#1454A6]'} mt-0.5">
+                                ${prod.price === 0 ? 'ฟรี (0 ฿)' : prod.price.toLocaleString() + ' <span class="text-xs font-bold text-slate-400">฿</span>'}
+                            </p>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function addToCart(productId) {
+            playTapSound();
+            const prod = appState.products.find(p => p.id === productId);
+            if (!prod) return;
+
+            const existing = appState.cart.find(c => c.id === productId);
+            if (existing) {
+                existing.qty += 1;
+            } else {
+                appState.cart.push({
+                    id: prod.id,
+                    category: prod.category || 'drink',
+                    name: prod.name,
+                    cans: prod.cans,
+                    price: prod.price,
+                    bonusItems: prod.bonusItems ? JSON.parse(JSON.stringify(prod.bonusItems)) : [],
+                    qty: 1
+                });
+            }
+            saveState();
+            renderSaleProducts();
+            updateCartUI();
+        }
+
+        function updateCartItemQty(productId, delta) {
+            playTapSound();
+            const idx = appState.cart.findIndex(c => c.id === productId);
+            if (idx === -1) return;
+
+            appState.cart[idx].qty += delta;
+            if (appState.cart[idx].qty <= 0) {
+                appState.cart.splice(idx, 1);
+            }
+            saveState();
+            renderSaleProducts();
+            updateCartUI();
+        }
+
+        function clearCart() {
+            playTapSound();
+            appState.cart = [];
+            isCartDrawerOpen = false;
+            saveState();
+            renderSaleProducts();
+            updateCartUI();
+        }
+
+        function toggleCartDrawer() {
+            if (appState.cart.length === 0) return;
+            playTapSound();
+            isCartDrawerOpen = !isCartDrawerOpen;
+            updateCartUI();
+        }
+
+        function updateCartUI() {
+            let totalQty = 0;
+            let totalDrinkCans = 0;
+            let totalOtherUnits = 0;
+            let totalPrice = 0;
+
+            appState.cart.forEach(item => {
+                totalQty += item.qty;
+                const cat = item.category || 'drink';
+                if (isDrinkStockCategory(cat)) {
+                    totalDrinkCans += item.cans * item.qty;
+                } else {
+                    totalOtherUnits += item.cans * item.qty;
+                }
+                totalPrice += item.price * item.qty;
+            });
+
+            document.getElementById('cartItemCountBadge').textContent = totalQty;
+            
+            let unitParts = [];
+            if (totalDrinkCans > 0) unitParts.push(`${totalDrinkCans} กป.`);
+            if (totalOtherUnits > 0) unitParts.push(`${totalOtherUnits} รายการ`);
+            document.getElementById('cartTotalUnitsText').textContent = unitParts.length > 0 ? unitParts.join(' + ') : '0 รายการ';
+            
+            document.getElementById('cartTotalPriceText').textContent = `${totalPrice.toLocaleString()} ฿`;
+
+            const clearBtn = document.getElementById('clearCartBtn');
+            const drawer = document.getElementById('cartDrawerList');
+            const chevron = document.getElementById('cartChevron');
+            const btnCash = document.getElementById('btnPayCash');
+            const btnQR = document.getElementById('btnPayQR');
+
+            if (appState.cart.length > 0) {
+                clearBtn.classList.remove('hidden');
+                btnCash.disabled = false;
+                btnCash.className = 'btn-press py-3.5 px-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 bg-[#0F9D58] hover:bg-[#0C854A] text-white shadow-sm cursor-pointer';
+
+                btnQR.disabled = false;
+                btnQR.className = 'btn-press py-3.5 px-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 bg-[#1454A6] hover:bg-[#0F4387] text-white shadow-sm cursor-pointer';
+
+                if (isCartDrawerOpen) {
+                    drawer.classList.remove('hidden');
+                    chevron.classList.add('rotate-180');
+                    drawer.innerHTML = appState.cart.map(item => {
+                        const cat = item.category || 'drink';
+                        const meta = getCategoryMeta(cat);
+                        return `
+                            <div class="py-2.5 flex items-center justify-between gap-2 text-xs">
+                                <div class="flex-1 min-w-0">
+                                    <p class="font-bold text-slate-800 truncate">${item.name}</p>
+                                    <p class="text-slate-400 font-num">${item.price === 0 ? 'ฟรี (0 ฿)' : item.price.toLocaleString() + ' ฿'} • ${item.cans * item.qty} ${meta.unit}</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="updateCartItemQty('${item.id}', -1)" class="w-7 h-7 rounded-full bg-white border border-slate-300 font-bold text-slate-700 flex items-center justify-center">-</button>
+                                    <span class="font-num font-extrabold w-5 text-center text-sm">${item.qty}</span>
+                                    <button onclick="updateCartItemQty('${item.id}', 1)" class="w-7 h-7 rounded-full bg-[#1454A6] text-white font-bold flex items-center justify-center">+</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    drawer.classList.add('hidden');
+                    chevron.classList.remove('rotate-180');
+                }
+            } else {
+                clearBtn.classList.add('hidden');
+                drawer.classList.add('hidden');
+                isCartDrawerOpen = false;
+                chevron.classList.remove('rotate-180');
+
+                btnCash.disabled = true;
+                btnCash.className = 'py-3.5 px-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 bg-slate-100 text-slate-400 cursor-not-allowed';
+
+                btnQR.disabled = true;
+                btnQR.className = 'py-3.5 px-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2 bg-slate-100 text-slate-400 cursor-not-allowed';
+            }
+        }
+
+        // ---------------------------------------------------------
+        // 8. CHECKOUT FLOW (CASH, PROMPTPAY QR & SPLIT MIXED)
+        // ---------------------------------------------------------
+        function getCartTotals() {
+            let totalCans = 0;
+            let totalUnits = 0;
+            let totalPrice = 0;
+            appState.cart.forEach(item => {
+                const cat = item.category || 'drink';
+                if (isDrinkStockCategory(cat)) {
+                    totalCans += item.cans * item.qty;
+                }
+                totalUnits += item.cans * item.qty;
+                totalPrice += item.price * item.qty;
+            });
+            return { totalCans, totalUnits, totalPrice };
+        }
+
+        function openCheckoutModal(type) {
+            if (appState.cart.length === 0) return;
+            playTapSound();
+            currentPaymentType = type;
+            const { totalUnits, totalPrice } = getCartTotals();
+
+            document.getElementById('chkOrderItemsSummary').textContent = `${appState.cart.length} รายการ (${totalUnits} หน่วย)`;
+            document.getElementById('chkTotalDue').textContent = `${totalPrice.toLocaleString()} ฿`;
+            document.getElementById('orderNoteInput').value = '';
+
+            const cashSec = document.getElementById('cashPaymentSection');
+            const qrSec = document.getElementById('qrPaymentSection');
+
+            if (type === 'cash') {
+                document.getElementById('checkoutModalTitle').textContent = '💵 ชำระด้วยเงินสด';
+                cashSec.classList.remove('hidden');
+                qrSec.classList.add('hidden');
+                document.getElementById('cashReceivedInput').value = totalPrice;
+                calculateCashChange();
+            } else {
+                document.getElementById('checkoutModalTitle').textContent = '📱 ชำระโอน QR / จ่ายผสม';
+                cashSec.classList.add('hidden');
+                qrSec.classList.remove('hidden');
+                setQrMode('full');
+            }
+
+            document.getElementById('checkoutModal').classList.remove('hidden');
+        }
+
+        function setQuickCash(val) {
+            playTapSound();
+            const { totalPrice } = getCartTotals();
+            const input = document.getElementById('cashReceivedInput');
+            input.value = (val === 'exact') ? totalPrice : val;
+            calculateCashChange();
+        }
+
+        function calculateCashChange() {
+            const { totalPrice } = getCartTotals();
+            const received = parseFloat(document.getElementById('cashReceivedInput').value) || 0;
+            const change = received - totalPrice;
+            const changeEl = document.getElementById('cashChangeAmount');
+            const boxEl = document.getElementById('cashChangeBox');
+
+            if (change >= 0) {
+                changeEl.textContent = `${change.toLocaleString()} ฿`;
+                changeEl.className = 'font-num text-2xl font-extrabold text-emerald-700';
+                boxEl.className = 'bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-center justify-between';
+            } else {
+                changeEl.textContent = `ขาด ${Math.abs(change).toLocaleString()} ฿`;
+                changeEl.className = 'font-num text-xl font-extrabold text-rose-600';
+                boxEl.className = 'bg-rose-50 border border-rose-200 rounded-2xl p-3.5 flex items-center justify-between';
+            }
+        }
+
+        function setQrMode(mode) {
+            playTapSound();
+            currentQrMode = mode;
+            const { totalPrice } = getCartTotals();
+            const fullBtn = document.getElementById('modeFullQrBtn');
+            const splitBtn = document.getElementById('modeSplitQrBtn');
+            const splitWrapper = document.getElementById('splitCashWrapper');
+
+            if (mode === 'full') {
+                fullBtn.className = 'flex-1 py-1.5 rounded-lg text-xs font-bold bg-white text-[#1454A6] shadow-2xs';
+                splitBtn.className = 'flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-600';
+                splitWrapper.classList.add('hidden');
+                renderPromptPayQR(totalPrice);
+            } else {
+                splitBtn.className = 'flex-1 py-1.5 rounded-lg text-xs font-bold bg-white text-[#1454A6] shadow-2xs';
+                fullBtn.className = 'flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-600';
+                splitWrapper.classList.remove('hidden');
+                document.getElementById('splitCashInput').value = '';
+                updateSplitQrAmount();
+            }
+        }
+
+        function updateSplitQrAmount() {
+            const { totalPrice } = getCartTotals();
+            const cashPart = Math.max(0, parseFloat(document.getElementById('splitCashInput').value) || 0);
+            const qrPart = Math.max(0, totalPrice - cashPart);
+            document.getElementById('splitQrRemainingText').textContent = `${qrPart.toLocaleString()} ฿`;
+            renderPromptPayQR(qrPart);
+        }
+
+        function renderPromptPayQR(amount) {
+            const container = document.getElementById('promptpayQrContainer');
+            const nameLabel = document.getElementById('qrReceiverNameDisplay');
+            const accountMaskEl = document.getElementById('qrAccountMaskDisplay');
+
+            nameLabel.textContent = appState.promptpayName || 'น.ส. จิณัฐชิสา ซาโนะ';
+            const maskStr = appState.promptpayAccountMask ? `บัญชี ${appState.promptpayAccountMask} • ` : '';
+            accountMaskEl.innerHTML = `${maskStr}ยอดโอน <strong class="font-num text-[#1454A6]">${Number(amount).toLocaleString()} ฿</strong>`;
+            container.innerHTML = '';
+
+            if (!appState.promptpayId) {
+                container.innerHTML = `
+                    <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                        ⚠️ ยังไม่ได้ตั้งค่าเบอร์/รหัสพร้อมเพย์<br>กดปุ่ม "ตั้งค่าบัญชีพร้อมเพย์ร้าน" ด้านล่างเพื่อสร้าง QR อัตโนมัติ
+                    </div>
+                `;
+                return;
+            }
+
+            if (amount <= 0) {
+                container.innerHTML = `<div class="p-6 text-xs font-bold text-emerald-600">✅ ยอดเงินสดครอบคลุมทั้งหมดแล้ว (ไม่ต้องสแกน QR)</div>`;
+                return;
+            }
+
+            const payload = generatePromptPayPayload(appState.promptpayId, amount);
+            new QRCode(container, {
+                text: payload,
+                width: 185,
+                height: 185,
+                colorDark: '#0F172A',
+                colorLight: '#FFFFFF',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        }
+
+        function confirmCheckout() {
+            const { totalCans, totalPrice } = getCartTotals();
+            let cashPart = 0;
+            let transferPart = 0;
+            let paymentLabel = '';
+
+            if (currentPaymentType === 'cash') {
+                const received = parseFloat(document.getElementById('cashReceivedInput').value) || 0;
+                if (received < totalPrice) {
+                    showToast('⚠️ ยอดเงินสดที่รับมาน้อยกว่ายอดชำระ');
+                    return;
+                }
+                cashPart = totalPrice;
+                transferPart = 0;
+                paymentLabel = totalPrice === 0 ? 'แจก / ชิมฟรี' : 'เงินสด';
+            } else {
+                if (currentQrMode === 'full') {
+                    cashPart = 0;
+                    transferPart = totalPrice;
+                    paymentLabel = totalPrice === 0 ? 'แจก / ชิมฟรี' : 'โอน QR';
+                } else {
+                    const splitCash = Math.max(0, parseFloat(document.getElementById('splitCashInput').value) || 0);
+                    if (splitCash > totalPrice) {
+                        showToast('⚠️ ยอดเงินสดเกินยอดรวมบิล');
+                        return;
+                    }
+                    cashPart = splitCash;
+                    transferPart = totalPrice - splitCash;
+                    paymentLabel = (cashPart > 0 && transferPart > 0) ? 'จ่ายผสม (สด+QR)' : (cashPart > 0 ? 'เงินสด' : 'โอน QR');
+                }
+            }
+
+            const now = new Date();
+            const dateISO = getLocalDateISO(now);
+            const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+            const dateDisplay = now.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' });
+
+            const newSale = {
+                id: Date.now(),
+                dateISO: dateISO,
+                timestamp: `${dateDisplay} ${timeStr}`,
+                branch: appState.branchName || 'ไม่ระบุสาขา',
+                items: JSON.parse(JSON.stringify(appState.cart)),
+                totalCans: totalCans,
+                totalPrice: totalPrice,
+                cashPart: cashPart,
+                transferPart: transferPart,
+                paymentLabel: paymentLabel,
+                note: document.getElementById('orderNoteInput').value.trim(),
+                voided: false,
+                synced: false
+            };
+
+            appState.salesHistory.unshift(newSale);
+            appState.cart = [];
+            isCartDrawerOpen = false;
+            saveState();
+
+            playSuccessSound();
+            closeModal('checkoutModal');
+            renderSaleProducts();
+            updateCartUI();
+            updateQuickStockBadge();
+            showToast(`✅ ปิดบิลสำเร็จ! (${totalPrice.toLocaleString()} ฿)`);
+
+            pushSaleToFirebase(newSale);
+        }
+
+        // ---------------------------------------------------------
+        // 9. ADMIN BACK-OFFICE, STOCK & SHIFT RECEIPT
+        // ---------------------------------------------------------
+        function getLocalDateISO(dateObj) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function formatTraysAndCans(totalCans) {
+            const abs = Math.abs(totalCans);
+            const trays = Math.floor(abs / CANS_PER_TRAY);
+            const rem = abs % CANS_PER_TRAY;
+            const sign = totalCans < 0 ? '-' : '';
+            return `${sign}${trays} ถาด ${rem} กป.`;
+        }
+
+        function getAllTimeRemainingStock(branchFilter = 'ALL') {
+            const matchesBranch = (bName) => branchFilter === 'ALL' || (bName || 'ไม่ระบุสาขา') === branchFilter;
+
+            let totalAddedCans = 0;
+            let totalTastingCans = 0;
+            appState.stockLogs.forEach(log => {
+                if (matchesBranch(log.branch)) {
+                    const cans = (log.trays * CANS_PER_TRAY) + log.cans;
+                    if (log.type === 'add') totalAddedCans += cans;
+                    else if (log.type === 'tasting') totalTastingCans += cans;
+                }
+            });
+
+            let totalSoldDrinkCans = 0;
+            appState.salesHistory.forEach(sale => {
+                if (!sale.voided && matchesBranch(sale.branch)) {
+                    if (Array.isArray(sale.items)) {
+                        sale.items.forEach(it => {
+                            const c = it.category || 'drink';
+                            if (isDrinkStockCategory(c)) {
+                                totalSoldDrinkCans += it.cans * it.qty;
+                            }
+                        });
+                    } else {
+                        totalSoldDrinkCans += (sale.totalCans || 0);
+                    }
+                }
+            });
+
+            const totalOutCans = totalSoldDrinkCans + totalTastingCans;
+            const remainCans = totalAddedCans - totalOutCans;
+            return { totalAddedCans, totalOutCans, remainCans };
+        }
+
+        function updateQuickStockBadge() {
+            const myBranch = appState.branchName || 'ไม่ระบุสาขา';
+            const { remainCans } = getAllTimeRemainingStock(myBranch);
+            document.getElementById('quickStockBadge').textContent = `${remainCans.toLocaleString()} กป.`;
+        }
+
+        // --- ADMIN PIN & ACCESS CONTROL ---
+        function openAdminPinModal(mode = 'unlock') {
+            playTapSound();
+            pinModalMode = mode;
+            const title = document.getElementById('adminPinModalTitle');
+            const desc = document.getElementById('adminPinModalDesc');
+            const submitBtn = document.getElementById('adminPinSubmitBtn');
+            const input = document.getElementById('adminPinInput');
+            input.value = '';
+
+            if (mode === 'change') {
+                title.textContent = '🔑 เปลี่ยนรหัสผ่าน Admin PIN';
+                desc.textContent = 'ตั้งรหัสตัวเลขใหม่ (4-8 หลัก) สำหรับเจ้าของร้านใช้ปลดล็อกดูยอดรวมทุกสาขา';
+                submitBtn.textContent = 'บันทึกรหัสใหม่';
+            } else {
+                title.textContent = '🔓 ปลดล็อกเจ้าของร้าน (Admin PIN)';
+                desc.textContent = 'กรุณากรอกรหัสผ่าน Admin PIN เพื่อดูยอดขายรวมทุกสาขา/ทุกบูธ';
+                submitBtn.textContent = 'ปลดล็อก';
+            }
+
+            document.getElementById('adminPinModal').classList.remove('hidden');
+            setTimeout(() => input.focus(), 100);
+        }
+
+        function submitAdminPin() {
+            const entered = (document.getElementById('adminPinInput').value || '').trim();
+            if (!entered) {
+                showToast('⚠️ กรุณากรอกรหัส PIN');
+                return;
+            }
+
+            if (pinModalMode === 'change') {
+                if (entered.length < 4) {
+                    showToast('⚠️ รหัส PIN ต้องมีอย่างน้อย 4 หลัก');
+                    return;
+                }
+                appState.adminPin = entered;
+                saveState();
+                closeModal('adminPinModal');
+                showToast('✅ เปลี่ยนรหัส Admin PIN เรียบร้อย (กดดาวน์โหลดไฟล์ใหม่เพื่ออัปเดตสาขาอื่น)');
+            } else {
+                const validPin = appState.adminPin || EMBEDDED_POS_CONFIG.adminPin || '1234';
+                if (entered === validPin) {
+                    isOwnerUnlocked = true;
+                    playSuccessSound();
+                    closeModal('adminPinModal');
+                    renderAdminDashboard();
+                    showToast('👑 ปลดล็อกโหมดเจ้าของร้านแล้ว');
+                } else {
+                    showToast('❌ รหัสผ่าน Admin PIN ไม่ถูกต้อง');
+                }
+            }
+        }
+
+        function lockOwnerMode() {
+            playTapSound();
+            isOwnerUnlocked = false;
+            renderAdminDashboard();
+            showToast('🔒 ล็อกกลับสู่โหมดสาขาย่อยแล้ว');
+        }
+
+        function updateAccessControlUI() {
+            const banner = document.getElementById('accessControlBanner');
+            const iconBox = document.getElementById('accessIconBox');
+            const titleText = document.getElementById('accessTitleText');
+            const subText = document.getElementById('accessSubText');
+            const actionBtns = document.getElementById('accessActionButtons');
+            const hqCard = document.getElementById('hqBranchComparisonCard');
+            const branchSelect = document.getElementById('adminBranchFilter');
+            const resetBtn = document.getElementById('btnResetAllData');
+            const myBranch = appState.branchName || 'ไม่ระบุสาขา';
+
+            if (isOwnerUnlocked) {
+                banner.className = 'bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-[#1454A6]/30 rounded-3xl p-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3';
+                iconBox.className = 'w-10 h-10 rounded-2xl bg-[#1454A6] text-white flex items-center justify-center text-lg shrink-0';
+                iconBox.textContent = '👑';
+                titleText.className = 'font-bold text-sm text-[#1454A6]';
+                titleText.textContent = 'โหมดเจ้าของร้าน (HQ Unlocked)';
+                subText.className = 'text-[11px] text-slate-600 mt-0.5';
+                subText.textContent = 'ดูยอดขายรวมทุกสาขา เปรียบเทียบรายบูธ และจัดการระบบได้ทั้งหมด';
+                actionBtns.innerHTML = `
+                    <button onclick="openAdminPinModal('change')" class="btn-press bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-2 rounded-xl">🔑 เปลี่ยนรหัส PIN</button>
+                    <button onclick="lockOwnerMode()" class="btn-press bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-3 py-2 rounded-xl">🔒 ล็อกกลับโหมดสาขาย่อย</button>
+                `;
+                if (hqCard) hqCard.classList.remove('hidden');
+                if (branchSelect) branchSelect.disabled = false;
+                if (resetBtn) resetBtn.classList.remove('hidden');
+            } else {
+                banner.className = 'bg-amber-50 border border-amber-200 rounded-3xl p-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3';
+                iconBox.className = 'w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-lg shrink-0';
+                iconBox.textContent = '🔒';
+                titleText.className = 'font-bold text-sm text-amber-950';
+                titleText.textContent = `โหมดสาขาย่อย (${myBranch})`;
+                subText.className = 'text-[11px] text-amber-800/80 mt-0.5';
+                subText.textContent = 'แสดงเฉพาะข้อมูลของสาขานี้ • ใส่รหัส Admin PIN เพื่อดูยอดรวมทุกสาขา';
+                actionBtns.innerHTML = `
+                    <button onclick="openAdminPinModal('unlock')" class="btn-press bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-2xs flex items-center gap-1.5">
+                        <span>🔓 ปลดล็อกเจ้าของร้าน</span>
+                    </button>
+                `;
+                if (hqCard) hqCard.classList.add('hidden');
+                if (branchSelect) {
+                    branchSelect.value = myBranch;
+                    branchSelect.disabled = true;
+                }
+                if (resetBtn) resetBtn.classList.add('hidden');
+            }
+        }
+
+        function populateAdminFilters() {
+            const myBranch = appState.branchName || 'ไม่ระบุสาขา';
+
+            const branchSelect = document.getElementById('adminBranchFilter');
+            if (!isOwnerUnlocked) {
+                branchSelect.innerHTML = `<option value="${myBranch}">🔒 ${myBranch}</option>`;
+                branchSelect.value = myBranch;
+                branchSelect.disabled = true;
+            } else {
+                branchSelect.disabled = false;
+                const currentBranch = branchSelect.value || 'ALL';
+                const branches = new Set();
+                if (appState.branchName) branches.add(appState.branchName);
+                appState.salesHistory.forEach(s => { if (s.branch) branches.add(s.branch); });
+                appState.stockLogs.forEach(l => { if (l.branch) branches.add(l.branch); });
+
+                let bHtml = `<option value="ALL">🌐 รวมทุกสาขา / บูธ</option>`;
+                Array.from(branches).sort().forEach(b => {
+                    bHtml += `<option value="${b}">📍 ${b}</option>`;
+                });
+                branchSelect.innerHTML = bHtml;
+                if (currentBranch === 'ALL' || branches.has(currentBranch)) {
+                    branchSelect.value = currentBranch;
+                } else {
+                    branchSelect.value = 'ALL';
+                }
+            }
+
+            const dateSelect = document.getElementById('adminDateFilter');
+            const currentDateVal = dateSelect.value;
+            const dateSet = new Set();
+            const todayISO = getLocalDateISO(new Date());
+            dateSet.add(todayISO);
+
+            appState.salesHistory.forEach(s => { if (s.dateISO) dateSet.add(s.dateISO); });
+            appState.stockLogs.forEach(l => { if (l.dateISO) dateSet.add(l.dateISO); });
+
+            const sortedDates = Array.from(dateSet).sort().reverse();
+            let dHtml = `<option value="ALL">📅 ดูทั้งหมด (ทุกวัน)</option>`;
+            sortedDates.forEach(dISO => {
+                const label = (dISO === todayISO) ? `วันนี้ (${dISO})` : dISO;
+                dHtml += `<option value="${dISO}">${label}</option>`;
+            });
+            dateSelect.innerHTML = dHtml;
+            if (currentDateVal && (currentDateVal === 'ALL' || dateSet.has(currentDateVal))) {
+                dateSelect.value = currentDateVal;
+            }
+        }
+
+        function getFilteredAdminContext() {
+            const myBranch = appState.branchName || 'ไม่ระบุสาขา';
+            const selectedBranch = isOwnerUnlocked
+                ? (document.getElementById('adminBranchFilter').value || 'ALL')
+                : myBranch;
+            const selectedDate = document.getElementById('adminDateFilter').value || 'ALL';
+
+            const matchesFilter = (itemBranch, itemDate) => {
+                const bOk = (selectedBranch === 'ALL') || ((itemBranch || 'ไม่ระบุสาขา') === selectedBranch);
+                const dOk = (selectedDate === 'ALL') || (itemDate === selectedDate);
+                return bOk && dOk;
+            };
+
+            const filteredSales = appState.salesHistory.filter(s => matchesFilter(s.branch, s.dateISO));
+            const validSales = filteredSales.filter(s => !s.voided);
+            const filteredStock = appState.stockLogs.filter(l => matchesFilter(l.branch, l.dateISO));
+
+            return { selectedBranch, selectedDate, filteredSales, validSales, filteredStock };
+        }
+
+        function renderBranchComparison(selectedDate) {
+            const listEl = document.getElementById('branchComparisonList');
+            if (!listEl || !isOwnerUnlocked) return;
+
+            const branchMap = new Map();
+            const ensureBranch = (name) => {
+                const key = name || 'ไม่ระบุสาขา';
+                if (!branchMap.has(key)) {
+                    branchMap.set(key, { name: key, revenue: 0, cash: 0, qr: 0, bills: 0, cans: 0 });
+                }
+                return branchMap.get(key);
+            };
+
+            if (appState.branchName) ensureBranch(appState.branchName);
+
+            appState.salesHistory.forEach(s => {
+                if (s.voided) return;
+                if (selectedDate !== 'ALL' && s.dateISO !== selectedDate) return;
+                const b = ensureBranch(s.branch);
+                b.revenue += s.totalPrice;
+                b.cash += s.cashPart;
+                b.qr += s.transferPart;
+                b.bills += 1;
+                if (Array.isArray(s.items)) {
+                    s.items.forEach(it => {
+                        const c = it.category || 'drink';
+                        if (isDrinkStockCategory(c) && c !== 'tasting') {
+                            b.cans += (it.cans || 0) * (it.qty || 1);
+                        }
+                    });
+                } else {
+                    b.cans += (s.totalCans || 0);
+                }
+            });
+
+            const rows = Array.from(branchMap.values()).sort((a, b) => b.revenue - a.revenue);
+            if (rows.length === 0) {
+                listEl.innerHTML = `<p class="text-xs text-slate-400 col-span-full py-2">ยังไม่มีข้อมูลสาขา</p>`;
+                return;
+            }
+
+            listEl.innerHTML = rows.map(b => `
+                <div onclick="document.getElementById('adminBranchFilter').value='${b.name.replace(/'/g, "\\'")}'; renderAdminDashboard();" class="cursor-pointer bg-slate-50 hover:bg-blue-50/70 border border-slate-200 hover:border-[#1454A6] rounded-2xl p-3 transition">
+                    <div class="flex items-center justify-between gap-1 mb-1">
+                        <span class="font-bold text-xs text-slate-800 truncate">📍 ${b.name}</span>
+                        <span class="font-num text-[11px] font-semibold text-slate-500">${b.bills} บิล</span>
+                    </div>
+                    <p class="font-num text-xl font-extrabold text-[#1454A6]">${b.revenue.toLocaleString()} ฿</p>
+                    <div class="flex items-center justify-between text-[11px] text-slate-500 mt-1 pt-1 border-t border-slate-200/70">
+                        <span>💵 ${b.cash.toLocaleString()}฿ • 📱 ${b.qr.toLocaleString()}฿</span>
+                        <span class="font-bold text-slate-700">${b.cans} กป.</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderAdminDashboard() {
+            updateAccessControlUI();
+            populateAdminFilters();
+            const ctx = getFilteredAdminContext();
+            if (isOwnerUnlocked) {
+                renderBranchComparison(ctx.selectedDate);
+            }
+
+            let totalRevenue = 0;
+            let cashSales = 0;
+            let qrSales = 0;
+
+            const activeCategories = (appState.categories || DEFAULT_CATEGORIES).filter(c => c.id !== 'tasting');
+            const catTotals = {};
+            activeCategories.forEach(c => { catTotals[c.id] = 0; });
+
+            const itemMap = new Map();
+
+            ctx.validSales.forEach(s => {
+                totalRevenue += s.totalPrice;
+                cashSales += s.cashPart;
+                qrSales += s.transferPart;
+
+                s.items.forEach(item => {
+                    const cat = item.category || 'drink';
+                    const meta = getCategoryMeta(cat);
+                    const units = item.cans * item.qty;
+
+                    if (cat !== 'tasting') {
+                        if (catTotals[cat] === undefined) catTotals[cat] = 0;
+                        catTotals[cat] += units;
+                    }
+                    if (Array.isArray(item.bonusItems)) {
+                        item.bonusItems.forEach(b => {
+                            if (catTotals[b.category] === undefined) catTotals[b.category] = 0;
+                            catTotals[b.category] += (b.qty || 0) * item.qty;
+                        });
+                    }
+
+                    const key = `${item.name}__${cat}`;
+                    if (!itemMap.has(key)) {
+                        itemMap.set(key, { name: item.name, qty: 0, units: 0, unitLabel: meta.unit, revenue: 0 });
+                    }
+                    const rec = itemMap.get(key);
+                    rec.qty += item.qty;
+                    rec.units += units;
+                    rec.revenue += item.price * item.qty;
+                });
+            });
+
+            const startCash = Number(appState.startingCash) || 0;
+            const cashInDrawer = startCash + cashSales;
+
+            document.getElementById('statTotalRevenue').textContent = `${totalRevenue.toLocaleString()} ฿`;
+            document.getElementById('statTotalCashInDrawer').textContent = `${cashInDrawer.toLocaleString()} ฿`;
+            document.getElementById('statCashSales').textContent = `${cashSales.toLocaleString()} ฿`;
+            document.getElementById('statQrSales').textContent = `${qrSales.toLocaleString()} ฿`;
+            document.getElementById('statBillCount').textContent = `${ctx.validSales.length} บิล`;
+            document.getElementById('statStartingCash').textContent = `${startCash.toLocaleString()} ฿`;
+
+            // Render Dynamic Category Breakdown Cards
+            const catGrid = document.getElementById('adminCategoryBreakdownGrid');
+            if (catGrid) {
+                catGrid.innerHTML = activeCategories.map(c => {
+                    const countVal = catTotals[c.id] || 0;
+                    const cardStyle = c.cardBg || 'bg-slate-50 border-slate-200/70 text-slate-700';
+                    return `
+                        <div class="${cardStyle} border rounded-2xl p-3">
+                            <div class="flex items-center gap-1.5 text-xs font-semibold truncate">
+                                <span>${c.emoji || '🏷️'}</span><span class="truncate">${c.label}</span>
+                            </div>
+                            <p class="font-num text-xl font-extrabold text-slate-800 mt-1">${countVal.toLocaleString()} ${c.unit}</p>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Update All-Time Stock Card (filtered by branch)
+            const stockStats = getAllTimeRemainingStock(ctx.selectedBranch);
+            document.getElementById('stockAddedCans').textContent = `${stockStats.totalAddedCans.toLocaleString()} กป.`;
+            document.getElementById('stockAddedTrays').textContent = `${Math.floor(stockStats.totalAddedCans / CANS_PER_TRAY)} ถาด`;
+
+            document.getElementById('stockOutCans').textContent = `${stockStats.totalOutCans.toLocaleString()} กป.`;
+            document.getElementById('stockOutTrays').textContent = `${Math.floor(stockStats.totalOutCans / CANS_PER_TRAY)} ถาด`;
+
+            document.getElementById('stockRemainCans').textContent = `${stockStats.remainCans.toLocaleString()} กป.`;
+            document.getElementById('stockRemainTrays').textContent = formatTraysAndCans(stockStats.remainCans);
+
+            // Render Stock Log Accordion
+            const logContainer = document.getElementById('stockLogList');
+            if (ctx.filteredStock.length === 0) {
+                logContainer.innerHTML = `<p class="py-3 text-center text-slate-400">ยังไม่มีประวัติสต็อกในช่วงที่เลือก</p>`;
+            } else {
+                logContainer.innerHTML = ctx.filteredStock.map(log => {
+                    const totalCans = (log.trays * CANS_PER_TRAY) + log.cans;
+                    const isAdd = log.type === 'add';
+                    return `
+                        <div class="py-2 flex items-center justify-between gap-2">
+                            <div>
+                                <span class="font-bold ${isAdd ? 'text-emerald-600' : 'text-amber-600'}">
+                                    ${isAdd ? '➕ เติมสต็อก' : '🎁 ชิมฟรี/แจก'} +${totalCans} กป.
+                                </span>
+                                <span class="text-slate-400">(${log.trays} ถาด ${log.cans} กป.)</span>
+                                <p class="text-[11px] text-slate-500">${log.branch || ''} • ${log.timestamp} ${log.note ? '• ' + log.note : ''}</p>
+                            </div>
+                            <button onclick="deleteStockLog(${log.id})" class="text-rose-400 hover:text-rose-600 px-2 py-1 text-[11px]">ลบ</button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            renderShiftReceipt(ctx, { totalRevenue, cashSales, qrSales, startCash, cashInDrawer, activeCategories, catTotals, stockStats, itemMap });
+            renderSalesHistory(ctx.filteredSales);
+        }
+
+        function renderShiftReceipt(ctx, metrics) {
+            const nowStr = new Date().toLocaleString('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            document.getElementById('rcpBranchName').textContent = `สาขา: ${ctx.selectedBranch === 'ALL' ? 'รวมทุกสาขา / บูธ' : ctx.selectedBranch}`;
+            document.getElementById('rcpDateRange').textContent = `รอบวันที่: ${ctx.selectedDate === 'ALL' ? 'ทั้งหมด (ทุกวัน)' : ctx.selectedDate}`;
+            document.getElementById('rcpPrintedAt').textContent = `อัปเดตเมื่อ: ${nowStr}`;
+
+            document.getElementById('rcpBillCount').textContent = `${ctx.validSales.length} บิล`;
+            document.getElementById('rcpCashSales').textContent = `${metrics.cashSales.toLocaleString()} ฿`;
+            document.getElementById('rcpQrSales').textContent = `${metrics.qrSales.toLocaleString()} ฿`;
+            document.getElementById('rcpTotalSales').textContent = `${metrics.totalRevenue.toLocaleString()} ฿`;
+            document.getElementById('rcpStartCash').textContent = `${metrics.startCash.toLocaleString()} ฿`;
+            document.getElementById('rcpDrawerCash').textContent = `${metrics.cashInDrawer.toLocaleString()} ฿`;
+
+            // Section B: Dynamic Category Sold
+            document.getElementById('rcpCategoryList').innerHTML = metrics.activeCategories.map(c => {
+                const val = metrics.catTotals[c.id] || 0;
+                return `<div class="flex justify-between"><span>${c.emoji || '🏷️'} ${c.label}:</span><span class="font-num font-bold">${val.toLocaleString()} ${c.unit}</span></div>`;
+            }).join('');
+
+            // Section B: Drink Stock
+            let addedCansPeriod = 0;
+            let tastingCansPeriod = 0;
+            ctx.filteredStock.forEach(l => {
+                const c = (l.trays * CANS_PER_TRAY) + l.cans;
+                if (l.type === 'add') addedCansPeriod += c;
+                else if (l.type === 'tasting') tastingCansPeriod += c;
+            });
+            ctx.validSales.forEach(s => {
+                if (Array.isArray(s.items)) {
+                    s.items.forEach(it => {
+                        if ((it.category || 'drink') === 'tasting') {
+                            tastingCansPeriod += (it.cans || 1) * (it.qty || 1);
+                        }
+                    });
+                }
+            });
+
+            document.getElementById('rcpStockIn').textContent = `${addedCansPeriod.toLocaleString()} กป.`;
+            document.getElementById('rcpStockTasting').textContent = `${tastingCansPeriod.toLocaleString()} กป.`;
+            document.getElementById('rcpStockRemain').textContent = `${metrics.stockStats.remainCans.toLocaleString()} กป. (${formatTraysAndCans(metrics.stockStats.remainCans)})`;
+
+            // Section C: Item Breakdown
+            const itemListEl = document.getElementById('rcpItemBreakdown');
+            if (metrics.itemMap.size === 0) {
+                itemListEl.innerHTML = `<p class="text-slate-400 italic">ไม่มีรายการขายในช่วงที่เลือก</p>`;
+            } else {
+                const sortedItems = Array.from(metrics.itemMap.values()).sort((a, b) => b.revenue - a.revenue);
+                itemListEl.innerHTML = sortedItems.map(it => `
+                    <div class="flex justify-between gap-2">
+                        <span class="truncate">• ${it.name} <strong class="font-num">x${it.qty}</strong></span>
+                        <span class="font-num font-bold shrink-0">${it.revenue.toLocaleString()} ฿</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function printDailySummary() {
+            playTapSound();
+            window.print();
+        }
+
+        async function downloadSummaryPNG() {
+            playTapSound();
+            const receiptEl = document.getElementById('printReceiptArea');
+            if (!receiptEl || typeof html2canvas === 'undefined') {
+                showToast('⚠️ ระบบกำลังเตรียมตัวสร้างรูปภาพ กรุณาลองอีกครั้ง');
+                return;
+            }
+            try {
+                showToast('⏳ กำลังสร้างรูปภาพใบสรุปยอด...');
+                const canvas = await html2canvas(receiptEl, {
+                    scale: 2,
+                    backgroundColor: '#FFFFFF',
+                    useCORS: true
+                });
+                const link = document.createElement('a');
+                const dateStr = getLocalDateISO(new Date());
+                link.download = `Shibuya_Summary_${dateStr}.png`;
+                link.href = canvas.toDataURL('image/png');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast('🖼️ บันทึกรูปใบสรุปยอดลงเครื่องแล้ว!');
+            } catch (e) {
+                showToast('⚠️ ไม่สามารถสร้างรูปภาพได้ กรุณาใช้ปุ่มพิมพ์ใบสรุปแทน');
+            }
+        }
+
+        function copySummaryToLine() {
+            playTapSound();
+            const branch = document.getElementById('rcpBranchName').textContent;
+            const dateRange = document.getElementById('rcpDateRange').textContent;
+            const bills = document.getElementById('rcpBillCount').textContent;
+            const cash = document.getElementById('rcpCashSales').textContent;
+            const qr = document.getElementById('rcpQrSales').textContent;
+            const total = document.getElementById('rcpTotalSales').textContent;
+            const drawer = document.getElementById('rcpDrawerCash').textContent;
+            const remain = document.getElementById('rcpStockRemain').textContent;
+
+            const catRows = Array.from(document.querySelectorAll('#rcpCategoryList > div')).map(div => {
+                const spans = div.querySelectorAll('span');
+                return spans.length >= 2 ? `${spans[0].textContent} ${spans[1].textContent}` : '';
+            }).filter(Boolean);
+
+            const text = [
+                `📊 สรุปยอดขาย SHIBUYA HIGHBALL`,
+                `${branch}`,
+                `${dateRange}`,
+                `------------------------`,
+                `🧾 จำนวนบิล: ${bills}`,
+                `💵 เงินสดขายได้: ${cash}`,
+                `📱 โอน QR: ${qr}`,
+                `💰 ยอดขายรวมสุทธิ: ${total}`,
+                `🏦 เงินสดในเก๊ะ (รวมทอน): ${drawer}`,
+                `------------------------`,
+                ...catRows,
+                `📦 สต็อกเครื่องดื่มคงเหลือ: ${remain}`
+            ].join('\n');
+
+            copyTextFallback(text, '💬 คัดลอกสรุปยอดส่ง LINE เรียบร้อย!');
+        }
+
+        function renderSalesHistory(records) {
+            const historyContainer = document.getElementById('salesHistoryList');
+            document.getElementById('historyCountLabel').textContent = `${records.length} รายการ`;
+
+            if (records.length === 0) {
+                historyContainer.innerHTML = `
+                    <div class="text-center py-8 text-slate-400 text-xs">
+                        ยังไม่มีประวัติบิลขายในช่วงที่เลือก
+                    </div>
+                `;
+                return;
+            }
+
+            historyContainer.innerHTML = records.map(sale => {
+                const itemsText = sale.items.map(i => `${i.name} x${i.qty}`).join(', ');
+                const isVoid = sale.voided;
+
+                let payBadgeClass = 'bg-slate-100 text-slate-700';
+                if (sale.paymentLabel.includes('เงินสด')) payBadgeClass = 'bg-emerald-100 text-emerald-700';
+                else if (sale.paymentLabel.includes('โอน')) payBadgeClass = 'bg-sky-100 text-[#1454A6]';
+                else if (sale.paymentLabel.includes('ผสม')) payBadgeClass = 'bg-amber-100 text-amber-800';
+
+                return `
+                    <div class="p-3.5 rounded-2xl border ${isVoid ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200/90'} flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-num text-xs font-bold text-slate-500">${sale.timestamp}</span>
+                                <span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${payBadgeClass}">${sale.paymentLabel}</span>
+                                <span class="text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">📍 ${sale.branch}</span>
+                                ${isVoid ? '<span class="text-[11px] font-bold bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full">ยกเลิกบิลแล้ว</span>' : ''}
+                            </div>
+                            <p class="text-xs sm:text-sm font-bold text-slate-800 ${isVoid ? 'line-through' : ''}">${itemsText}</p>
+                            ${sale.cashPart > 0 && sale.transferPart > 0 ? `<p class="text-[11px] text-slate-500 font-num">เงินสด ${sale.cashPart.toLocaleString()} ฿ + โอน QR ${sale.transferPart.toLocaleString()} ฿</p>` : ''}
+                            ${sale.note ? `<p class="text-[11px] text-amber-700">📝 ${sale.note}</p>` : ''}
+                        </div>
+
+                        <div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                            <div class="text-left sm:text-right">
+                                <p class="font-num text-lg font-extrabold ${isVoid ? 'text-slate-400 line-through' : 'text-[#1454A6]'}">${sale.totalPrice.toLocaleString()} ฿</p>
+                            </div>
+                            ${!isVoid ? `
+                                <button onclick="confirmVoidSale(${sale.id})" class="btn-press px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold">
+                                    ยกเลิกบิล / คืนเงิน
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function confirmVoidSale(saleId) {
+            showDialog('ต้องการยกเลิกบิลนี้และคืนสต็อกใช่หรือไม่?', () => {
+                const sale = appState.salesHistory.find(s => s.id === saleId);
+                if (sale) {
+                    sale.voided = true;
+                    sale.synced = false;
+                    saveState();
+                    renderAdminDashboard();
+                    updateQuickStockBadge();
+                    showToast('↩️ ยกเลิกบิลเรียบร้อยแล้ว');
+                    pushSaleToFirebase(sale);
+                }
+            });
+        }
+
+        // ---------------------------------------------------------
+        // 10. STOCK MODAL ACTIONS
+        // ---------------------------------------------------------
+        function openStockModal(defaultType = 'add') {
+            playTapSound();
+            document.getElementById('stockActionType').value = defaultType;
+            document.getElementById('stockTrayInput').value = '';
+            document.getElementById('stockCanInput').value = '';
+            document.getElementById('stockNoteInput').value = defaultType === 'tasting' ? 'เปิดชิมฟรี / ของแจก' : '';
+            document.getElementById('stockModal').classList.remove('hidden');
+        }
+
+        function saveStockLog() {
+            const type = document.getElementById('stockActionType').value;
+            const trays = Math.max(0, parseInt(document.getElementById('stockTrayInput').value) || 0);
+            const cans = Math.max(0, parseInt(document.getElementById('stockCanInput').value) || 0);
+            const note = document.getElementById('stockNoteInput').value.trim();
+
+            if (trays === 0 && cans === 0) {
+                showToast('⚠️ กรุณาระบุจำนวนถาดหรือกระป๋อง');
+                return;
+            }
+
+            const now = new Date();
+            const newLog = {
+                id: Date.now(),
+                dateISO: getLocalDateISO(now),
+                timestamp: now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+                branch: appState.branchName || 'ไม่ระบุสาขา',
+                type: type,
+                trays: trays,
+                cans: cans,
+                note: note,
+                synced: false
+            };
+
+            appState.stockLogs.unshift(newLog);
+            saveState();
+            playSuccessSound();
+            closeModal('stockModal');
+            renderAdminDashboard();
+            updateQuickStockBadge();
+            showToast('✅ บันทึกสต็อกเรียบร้อย');
+
+            pushStockToFirebase(newLog);
+        }
+
+        function deleteStockLog(logId) {
+            showDialog('ลบรายการสต็อกนี้ใช่หรือไม่?', async () => {
+                appState.stockLogs = appState.stockLogs.filter(l => l.id !== logId);
+                saveState();
+                renderAdminDashboard();
+                updateQuickStockBadge();
+                showToast('🗑️ ลบรายการสต็อกแล้ว');
+
+                const base = cleanFirebaseBaseUrl(appState.firebaseUrl);
+                if (base) {
+                    try { await fetch(`${base}/stockLogs/${logId}.json`, { method: 'DELETE' }); } catch (e) {}
+                }
+            });
+        }
+
+        // ---------------------------------------------------------
+        // 11. SETTINGS, CUSTOM CATEGORY BUILDER & PRODUCT MANAGER
+        // ---------------------------------------------------------
+        function openBranchModal(isMandatory = false) {
+            if (!isMandatory) playTapSound();
+            document.getElementById('branchInput').value = appState.branchName || '';
+            const cancelBtn = document.getElementById('branchCancelBtn');
+            if (cancelBtn) {
+                if (isMandatory && !appState.branchName) cancelBtn.classList.add('hidden');
+                else cancelBtn.classList.remove('hidden');
+            }
+            document.getElementById('branchModal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('branchInput').focus(), 120);
+        }
+
+        function saveBranchName() {
+            const val = document.getElementById('branchInput').value.trim();
+            if (!val) {
+                showToast('⚠️ กรุณาระบุชื่อสาขาหรือบูธก่อนเริ่มใช้งาน');
+                return;
+            }
+            appState.branchName = val;
+            saveState();
+            updateBranchDisplay();
+            updateQuickStockBadge();
+            closeModal('branchModal');
+            playSuccessSound();
+            showToast(`✅ ตั้งค่าจุดขาย: ${val}`);
+        }
+
+        function updateBranchDisplay() {
+            document.getElementById('branchNameDisplay').textContent = appState.branchName || 'กรอกชื่อสาขา / Event';
+        }
+
+        function openStartingCashModal() {
+            playTapSound();
+            document.getElementById('startingCashInput').value = appState.startingCash;
+            document.getElementById('startingCashModal').classList.remove('hidden');
+        }
+
+        function saveStartingCash() {
+            appState.startingCash = Math.max(0, parseFloat(document.getElementById('startingCashInput').value) || 0);
+            saveState();
+            closeModal('startingCashModal');
+            renderAdminDashboard();
+            showToast('✅ อัปเดตเงินทอนตั้งต้นแล้ว');
+        }
+
+        function openQrConfigModal() {
+            closeModal('checkoutModal');
+            openSettingsModal();
+        }
+
+        function openSettingsModal() {
+            playTapSound();
+            document.getElementById('promptpayIdInput').value = appState.promptpayId || '';
+            document.getElementById('promptpayNameInput').value = appState.promptpayName || '';
+            document.getElementById('promptpayAccountMaskInput').value = appState.promptpayAccountMask || '';
+            const resetBtn = document.getElementById('btnResetAllData');
+            if (resetBtn) {
+                if (isOwnerUnlocked) resetBtn.classList.remove('hidden');
+                else resetBtn.classList.add('hidden');
+            }
+            const base = cleanFirebaseBaseUrl(appState.firebaseUrl);
+            document.getElementById('settingsCloudSummary').textContent = base ? `เชื่อมต่อแล้ว: ${base}` : 'ยังไม่ได้เชื่อมต่อ (โหมดออฟไลน์)';
+            renderCategoryConfigList();
+            renderProductConfigList();
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function renderCategoryConfigList() {
+            const container = document.getElementById('categoryConfigList');
+            if (!container) return;
+            const cats = appState.categories || DEFAULT_CATEGORIES;
+            container.innerHTML = cats.map(c => `
+                <div class="bg-white p-2 rounded-xl border border-indigo-100 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-9 h-9 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 overflow-hidden">
+                            ${getGraphicIllustrationSVG(c.graphic || c.id, 1)}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-800 truncate">${c.emoji || '🏷️'} ${c.label}</p>
+                            <p class="text-[10px] text-slate-400">หน่วย: ${c.unit} • ${c.deductCans ? 'ตัดสต็อกกป.' : 'ไม่ตัดสต็อกกป.'}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button type="button" onclick="openCategoryEditorModal('${c.id}')" class="text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-lg">แก้ไข</button>
+                        ${c.id !== 'drink' ? `<button type="button" onclick="deleteCategoryItem('${c.id}')" class="text-[11px] font-bold text-rose-500 hover:bg-rose-50 px-1.5 py-1 rounded-lg">ลบ</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openCategoryEditorModal(catId = '') {
+            playTapSound();
+            const isEdit = Boolean(catId);
+            const existing = isEdit ? (appState.categories || []).find(c => c.id === catId) : null;
+
+            document.getElementById('catEditorTitle').textContent = isEdit ? '✏️ แก้ไขหมวดหมู่ & ภาพกราฟิก' : '🎨 สร้างหมวดหมู่ & เลือกภาพกราฟิก';
+            document.getElementById('catEditIdInput').value = existing ? existing.id : '';
+            document.getElementById('catEmojiInput').value = existing ? (existing.emoji || '🍹') : '🍹';
+            document.getElementById('catLabelInput').value = existing ? existing.label : '';
+            document.getElementById('catUnitInput').value = existing ? existing.unit : 'แก้ว';
+            document.getElementById('catDeductCanInput').value = existing && existing.deductCans ? 'true' : 'false';
+
+            const selectedGraphic = existing ? (existing.graphic || existing.id) : 'cocktail';
+            selectCategoryGraphic(selectedGraphic);
+
+            document.getElementById('categoryEditorModal').classList.remove('hidden');
+        }
+
+        function selectCategoryGraphic(graphicKey) {
+            document.getElementById('catGraphicKeyInput').value = graphicKey;
+            const grid = document.getElementById('svgGraphicPickerGrid');
+            if (!grid) return;
+
+            grid.innerHTML = SVG_GRAPHIC_LIBRARY.map(item => {
+                const isSel = item.key === graphicKey;
+                return `
+                    <button type="button" onclick="selectCategoryGraphic('${item.key}')" class="btn-press p-2 rounded-xl border-2 flex flex-col items-center justify-between gap-1 text-center transition ${isSel ? 'border-indigo-600 bg-indigo-50/70 shadow-2xs' : 'border-slate-200 bg-white hover:border-indigo-300'}">
+                        <div class="h-11 flex items-center justify-center">
+                            ${getGraphicIllustrationSVG(item.key, 1)}
+                        </div>
+                        <span class="text-[10px] font-bold leading-tight ${isSel ? 'text-indigo-900' : 'text-slate-600'}">${item.label}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function saveCategoryItem() {
+            const editId = document.getElementById('catEditIdInput').value.trim();
+            const emoji = document.getElementById('catEmojiInput').value.trim() || '🏷️';
+            const label = document.getElementById('catLabelInput').value.trim();
+            const unit = document.getElementById('catUnitInput').value.trim() || 'ชิ้น';
+            const deductCans = document.getElementById('catDeductCanInput').value === 'true';
+            const graphic = document.getElementById('catGraphicKeyInput').value || 'merch_bag';
+
+            if (!label) {
+                showToast('⚠️ กรุณาตั้งชื่อหมวดหมู่');
+                return;
+            }
+
+            syncProductRowsFromDOM();
+
+            if (editId) {
+                const idx = appState.categories.findIndex(c => c.id === editId);
+                if (idx !== -1) {
+                    appState.categories[idx] = {
+                        ...appState.categories[idx],
+                        emoji, label, unit, deductCans, graphic
+                    };
+                }
+            } else {
+                const palette = CUSTOM_COLOR_PALETTE[appState.categories.length % CUSTOM_COLOR_PALETTE.length];
+                appState.categories.push({
+                    id: 'cat_' + Date.now(),
+                    emoji,
+                    label,
+                    unit,
+                    graphic,
+                    deductCans,
+                    badgeBg: palette.badgeBg,
+                    cardBg: palette.cardBg
+                });
+            }
+
+            saveState();
+            renderCategoryConfigList();
+            renderProductConfigList();
+            renderSaleProducts();
+            closeModal('categoryEditorModal');
+            playSuccessSound();
+            showToast(`✅ บันทึกหมวดหมู่ "${label}" แล้ว`);
+        }
+
+        function deleteCategoryItem(catId) {
+            if (catId === 'drink') return;
+            showDialog('ลบหมวดหมู่นี้ใช่หรือไม่? (สินค้าในหมวดนี้จะถูกย้ายไปหมวดเครื่องดื่ม)', () => {
+                syncProductRowsFromDOM();
+                appState.categories = appState.categories.filter(c => c.id !== catId);
+                appState.products.forEach(p => {
+                    if (p.category === catId) p.category = 'drink';
+                });
+                saveState();
+                renderCategoryConfigList();
+                renderProductConfigList();
+                renderSaleProducts();
+                showToast('🗑️ ลบหมวดหมู่เรียบร้อยแล้ว');
+            });
+        }
+
+        function syncProductRowsFromDOM() {
+            const rows = document.querySelectorAll('#productConfigList > [data-prod-idx]');
+            if (!rows || rows.length === 0) return;
+            const updatedProducts = [];
+            rows.forEach((row, idx) => {
+                const existing = appState.products[idx] || { id: 'p_' + Date.now() + idx };
+                const cat = row.querySelector('.prod-cat-sel').value || 'drink';
+                const name = row.querySelector('.prod-name-inp').value.trim() || 'สินค้า';
+                const cans = Math.max(1, parseInt(row.querySelector('.prod-cans-inp').value) || 1);
+                const price = Math.max(0, parseFloat(row.querySelector('.prod-price-inp').value) || 0);
+                const imgInput = row.querySelector('.prod-img-data');
+                const imageData = imgInput ? (imgInput.value || '') : (existing.imageData || '');
+                updatedProducts.push({ ...existing, category: cat, name, cans, price, imageData, active: true });
+            });
+            if (updatedProducts.length > 0) {
+                appState.products = updatedProducts;
+            }
+        }
+
+        function compressProductImage(file, maxDim = 180, quality = 0.78) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let w = img.width;
+                        let h = img.height;
+                        if (w > maxDim || h > maxDim) {
+                            if (w > h) {
+                                h = Math.round((h * maxDim) / w);
+                                w = maxDim;
+                            } else {
+                                w = Math.round((w * maxDim) / h);
+                                h = maxDim;
+                            }
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w;
+                        canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, w, h);
+                        let dataUrl = canvas.toDataURL('image/webp', quality);
+                        if (!dataUrl.startsWith('data:image/webp')) {
+                            dataUrl = canvas.toDataURL('image/jpeg', quality);
+                        }
+                        resolve(dataUrl);
+                    };
+                    img.onerror = reject;
+                    img.src = ev.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function handleProductImageUpload(inputEl, idx) {
+            const file = inputEl.files && inputEl.files[0];
+            if (!file) return;
+            try {
+                syncProductRowsFromDOM();
+                const compressedDataUrl = await compressProductImage(file, 180, 0.78);
+                if (appState.products[idx]) {
+                    appState.products[idx].imageData = compressedDataUrl;
+                }
+                renderProductConfigList();
+                showToast('📷 ย่อขนาดและแนบรูปเมนูเรียบร้อย');
+            } catch (err) {
+                showToast('⚠️ ไม่สามารถอ่านไฟล์รูปภาพนี้ได้');
+            }
+        }
+
+        function clearProductImage(idx) {
+            syncProductRowsFromDOM();
+            if (appState.products[idx]) {
+                appState.products[idx].imageData = '';
+            }
+            renderProductConfigList();
+            showToast('🔄 เปลี่ยนกลับเป็นภาพกราฟิก SVG แล้ว');
+        }
+
+        function renderProductConfigList() {
+            const container = document.getElementById('productConfigList');
+            const cats = appState.categories || DEFAULT_CATEGORIES;
+
+            container.innerHTML = appState.products.map((p, idx) => {
+                const cat = p.category || 'drink';
+                const meta = getCategoryMeta(cat);
+                const graphicKey = p.graphic || meta.graphic || cat;
+                const optionsHtml = cats.map(c =>
+                    `<option value="${c.id}" ${cat === c.id ? 'selected' : ''}>${c.emoji || '🏷️'} ${c.label} (${c.unit})</option>`
+                ).join('');
+
+                return `
+                    <div class="bg-slate-50 p-2.5 rounded-2xl border border-slate-200 space-y-2" data-prod-idx="${idx}">
+                        <input type="hidden" class="prod-img-data" value="${p.imageData || ''}">
+                        <div class="flex items-center gap-2">
+                            <!-- Thumbnail Preview + Upload Trigger -->
+                            <div class="relative shrink-0">
+                                <label class="cursor-pointer block w-12 h-12 rounded-xl bg-white border border-slate-300 hover:border-[#1454A6] flex items-center justify-center overflow-hidden shadow-2xs" title="แตะเพื่ออัปโหลดรูปภาพเมนู (ย่อขนาดอัตโนมัติ)">
+                                    ${p.imageData
+                                        ? `<img src="${p.imageData}" class="w-full h-full object-cover">`
+                                        : `<div class="scale-75 pointer-events-none">${getGraphicIllustrationSVG(graphicKey, p.cans, p.bonusItems)}</div>`}
+                                    <span class="absolute bottom-0 inset-x-0 bg-slate-900/65 text-white text-[9px] font-bold text-center leading-tight py-0.5">📷 รูป</span>
+                                    <input type="file" accept="image/*" onchange="handleProductImageUpload(this, ${idx})" class="hidden">
+                                </label>
+                                ${p.imageData ? `<button type="button" onclick="clearProductImage(${idx})" class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center shadow" title="ลบรูปถ่ายกลับไปใช้ไอคอน SVG">✕</button>` : ''}
+                            </div>
+
+                            <div class="flex-1 grid grid-cols-12 gap-1.5 items-center">
+                                <div class="col-span-5">
+                                    <select onchange="onConfigCategoryChange(this, ${idx})" class="prod-cat-sel w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold">
+                                        ${optionsHtml}
+                                    </select>
+                                </div>
+                                <div class="col-span-7">
+                                    <input type="text" value="${p.name}" class="prod-name-inp w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold" placeholder="ชื่อเมนู">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-12 gap-1.5 items-center">
+                            <div class="col-span-5 flex items-center gap-1">
+                                <input type="number" value="${p.cans}" min="1" class="prod-cans-inp font-num w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-center font-bold">
+                                <span class="prod-unit-lbl text-[11px] text-slate-500 shrink-0">${meta.unit}</span>
+                            </div>
+                            <div class="col-span-5 flex items-center gap-1">
+                                <input type="number" value="${p.price}" min="0" class="prod-price-inp font-num w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-right font-bold text-[#1454A6]">
+                                <span class="text-[11px] text-slate-500 shrink-0">฿</span>
+                            </div>
+                            <div class="col-span-2 text-right">
+                                <button type="button" onclick="removeProductRow(${idx})" class="text-rose-500 hover:bg-rose-100 rounded-xl px-2 py-1.5 font-bold text-xs">ลบ</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function onConfigCategoryChange(selectEl) {
+            const cat = selectEl.value;
+            const meta = getCategoryMeta(cat);
+            const row = selectEl.closest('[data-prod-idx]');
+            if (row) {
+                const lbl = row.querySelector('.prod-unit-lbl');
+                if (lbl) lbl.textContent = meta.unit;
+            }
+        }
+
+        function addProductRow() {
+            syncProductRowsFromDOM();
+            const defaultCat = (appState.categories && appState.categories.length > 0) ? appState.categories[0].id : 'drink';
+            appState.products.push({
+                id: 'p_' + Date.now(),
+                category: defaultCat,
+                name: 'เมนูใหม่',
+                cans: 1,
+                price: 100,
+                active: true
+            });
+            renderProductConfigList();
+        }
+
+        function removeProductRow(idx) {
+            syncProductRowsFromDOM();
+            if (appState.products.length <= 1) {
+                showToast('⚠️ ต้องมีอย่างน้อย 1 รายการสินค้า');
+                return;
+            }
+            appState.products.splice(idx, 1);
+            renderProductConfigList();
+        }
+
+        function saveSettings() {
+            appState.promptpayId = document.getElementById('promptpayIdInput').value.trim();
+            appState.promptpayName = document.getElementById('promptpayNameInput').value.trim() || 'น.ส. จิณัฐชิสา ซาโนะ';
+            appState.promptpayAccountMask = document.getElementById('promptpayAccountMaskInput').value.trim();
+
+            syncProductRowsFromDOM();
+
+            saveState();
+            renderSaleProducts();
+            closeModal('settingsModal');
+            showToast('✅ บันทึกการตั้งค่าเรียบร้อย');
+        }
+
+        function confirmResetAllData() {
+            if (!isOwnerUnlocked) {
+                showToast('🔒 เฉพาะเจ้าของร้านเท่านั้นที่สามารถล้างข้อมูลทั้งหมดได้');
+                return;
+            }
+            showDialog('⚠️ ล้างประวัติบิลและสต็อกทั้งหมดในเครื่องนี้?', () => {
+                appState.salesHistory = [];
+                appState.stockLogs = [];
+                appState.cart = [];
+                saveState();
+                closeModal('settingsModal');
+                renderSaleProducts();
+                updateCartUI();
+                updateQuickStockBadge();
+                renderAdminDashboard();
+                showToast('🗑️ ล้างข้อมูลทั้งหมดแล้ว');
+            });
+        }
+
+        // --- CLOUD SETUP MODAL ACTIONS ---
+        function openCloudSetupModal() {
+            playTapSound();
+            if (!isOwnerUnlocked) {
+                showToast('🔒 เฉพาะเจ้าของร้านเท่านั้น (กรุณาปลดล็อก Admin PIN ในหน้าหลังบ้านก่อน)');
+                return;
+            }
+            document.getElementById('firebaseUrlInput').value = appState.firebaseUrl || '';
+            const resBox = document.getElementById('firebaseTestResult');
+            resBox.classList.add('hidden');
+            document.getElementById('cloudSetupModal').classList.remove('hidden');
+        }
+
+        async function testFirebaseConnection() {
+            const rawUrl = document.getElementById('firebaseUrlInput').value;
+            const base = cleanFirebaseBaseUrl(rawUrl);
+            const resBox = document.getElementById('firebaseTestResult');
+            resBox.classList.remove('hidden', 'bg-emerald-50', 'text-emerald-700', 'bg-rose-50', 'text-rose-700');
+
+            if (!base) {
+                resBox.classList.add('bg-rose-50', 'text-rose-700');
+                resBox.textContent = '⚠️ กรุณากรอก URL ของ Firebase Realtime Database';
+                return;
+            }
+
+            resBox.classList.add('bg-slate-100', 'text-slate-700');
+            resBox.textContent = '⏳ กำลังทดสอบการเชื่อมต่อ...';
+
+            try {
+                const res = await fetch(`${base}/.json`);
+                if (res.ok) {
+                    resBox.classList.remove('bg-slate-100', 'text-slate-700');
+                    resBox.classList.add('bg-emerald-50', 'text-emerald-700');
+                    resBox.textContent = '✅ เชื่อมต่อ Firebase สำเร็จ! พร้อมซิงก์ข้อมูลทุกบูธ';
+                } else {
+                    throw new Error('HTTP ' + res.status);
+                }
+            } catch (e) {
+                resBox.classList.remove('bg-slate-100', 'text-slate-700');
+                resBox.classList.add('bg-rose-50', 'text-rose-700');
+                resBox.textContent = '❌ เชื่อมต่อไม่สำเร็จ ตรวจสอบ URL หรือเปิดสิทธิ์ Test Mode ใน Firebase';
+            }
+        }
+
+        async function saveFirebaseConfig() {
+            const base = cleanFirebaseBaseUrl(document.getElementById('firebaseUrlInput').value);
+            appState.firebaseUrl = base;
+            saveState();
+            closeModal('cloudSetupModal');
+
+            if (base) {
+                showToast('☁️ กำลังซิงก์ข้อมูลกับระบบออนไลน์...');
+                await syncAllWithFirebase(false);
+                startCloudSyncLoop();
+                showToast('✅ ซิงก์ข้อมูลออนไลน์เรียบร้อย!');
+            } else {
+                startCloudSyncLoop();
+                showToast('เปลี่ยนเป็นโหมดออฟไลน์แล้ว');
+            }
+        }
+
+        // --- EXPORT APP HTML WITH EMBEDDED CONFIG ---
+        function downloadAppHTML() {
+            playTapSound();
+            let docHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+            const embeddedObj = {
+                firebaseUrl: cleanFirebaseBaseUrl(appState.firebaseUrl),
+                adminPin: appState.adminPin || '1234',
+                promptpayId: appState.promptpayId || '004999205349524',
+                promptpayName: appState.promptpayName || 'น.ส. จิณัฐชิสา ซาโนะ',
+                promptpayAccountMask: appState.promptpayAccountMask || 'xxx-x-x5466-x',
+                startingCash: Number(appState.startingCash) || 0,
+                categories: appState.categories || DEFAULT_CATEGORIES,
+                products: appState.products || DEFAULT_PRODUCTS
+            };
+            const replacement = `const EMBEDDED_POS_CONFIG = ${JSON.stringify(embeddedObj)};`;
+            docHtml = docHtml.replace(/const EMBEDDED_POS_CONFIG = \{[\s\S]*?\};/, replacement);
+
+            const blob = new Blob([docHtml], { type: 'text/html;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Shibuya_Highball_POS.html';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showToast('💾 ดาวน์โหลดไฟล์ Shibuya_Highball_POS.html สำเร็จ!');
+        }
+
+        // --- GOOGLE SHEETS & CSV EXPORT ---
+        function copyToGoogleSheets() {
+            playTapSound();
+            const ctx = getFilteredAdminContext();
+            const records = ctx.validSales;
+            if (records.length === 0) {
+                showToast('⚠️ ไม่มีข้อมูลบิลขายให้ส่งออก');
+                return;
+            }
+
+            let tsv = 'วันที่-เวลา\tสาขา/Event\tรายการสินค้า\tจำนวนเครื่องดื่ม (กป.)\tสินค้าอื่นๆ (ชิ้น)\tยอดรวม (บาท)\tเงินสด (บาท)\tโอน QR (บาท)\tช่องทางชำระ\tหมายเหตุ\n';
+            records.forEach(s => {
+                const itemsStr = s.items.map(i => `${i.name} (x${i.qty})`).join('; ');
+                const drinkCans = s.items.reduce((sum, i) => sum + (isDrinkStockCategory(i.category || 'drink') ? i.cans * i.qty : 0), 0);
+                const otherUnits = s.items.reduce((sum, i) => sum + (!isDrinkStockCategory(i.category || 'drink') ? i.cans * i.qty : 0), 0);
+                tsv += `${s.timestamp}\t${s.branch}\t${itemsStr}\t${drinkCans}\t${otherUnits}\t${s.totalPrice}\t${s.cashPart}\t${s.transferPart}\t${s.paymentLabel}\t${s.note || ''}\n`;
+            });
+
+            copyTextFallback(tsv, '📋 คัดลอกแล้ว! เปิด Google Sheets แล้วกด Paste (วาง) ได้เลย');
+        }
+
+        function downloadCSV() {
+            playTapSound();
+            const ctx = getFilteredAdminContext();
+            const records = ctx.validSales;
+            if (records.length === 0) {
+                showToast('⚠️ ไม่มีข้อมูลบิลขายให้ดาวน์โหลด');
+                return;
+            }
+
+            let csv = '\uFEFFวันที่-เวลา,สาขา/Event,รายการสินค้า,จำนวนเครื่องดื่ม (กป.),สินค้าอื่นๆ (ชิ้น),ยอดรวม (บาท),เงินสด (บาท),โอน QR (บาท),ช่องทางชำระ,หมายเหตุ\n';
+            records.forEach(s => {
+                const itemsStr = s.items.map(i => `${i.name} (x${i.qty})`).join('; ');
+                const drinkCans = s.items.reduce((sum, i) => sum + (isDrinkStockCategory(i.category || 'drink') ? i.cans * i.qty : 0), 0);
+                const otherUnits = s.items.reduce((sum, i) => sum + (!isDrinkStockCategory(i.category || 'drink') ? i.cans * i.qty : 0), 0);
+                csv += `"${s.timestamp}","${s.branch}","${itemsStr}",${drinkCans},${otherUnits},${s.totalPrice},${s.cashPart},${s.transferPart},"${s.paymentLabel}","${(s.note || '').replace(/"/g, '""')}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Shibuya_Highball_POS_${getLocalDateISO(new Date())}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showToast('📥 ดาวน์โหลดไฟล์ CSV เรียบร้อย');
+        }
+
+        function copyTextFallback(text, successMsg) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast(successMsg);
+            } catch (err) {
+                showToast('⚠️ ไม่สามารถคัดลอกอัตโนมัติได้');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // ---------------------------------------------------------
+        // 12. NAVIGATION, SOUND TOGGLE & UI HELPERS
+        // ---------------------------------------------------------
+        function switchTab(tab) {
+            playTapSound();
+            const saleView = document.getElementById('saleView');
+            const adminView = document.getElementById('adminView');
+            const bottomBar = document.getElementById('bottomCartBar');
+            const tabSaleBtn = document.getElementById('tabSaleBtn');
+            const tabAdminBtn = document.getElementById('tabAdminBtn');
+
+            if (tab === 'sale') {
+                saleView.classList.remove('hidden');
+                bottomBar.classList.remove('hidden');
+                adminView.classList.add('hidden');
+
+                tabSaleBtn.className = 'py-2 px-4 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all bg-white text-[#1454A6] shadow';
+                tabAdminBtn.className = 'py-2 px-4 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all text-blue-100 hover:text-white';
+                renderSaleProducts();
+                updateQuickStockBadge();
+            } else {
+                saleView.classList.add('hidden');
+                bottomBar.classList.add('hidden');
+                adminView.classList.remove('hidden');
+
+                tabAdminBtn.className = 'py-2 px-4 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all bg-white text-[#1454A6] shadow';
+                tabSaleBtn.className = 'py-2 px-4 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all text-blue-100 hover:text-white';
+                renderAdminDashboard();
+            }
+        }
+
+        function toggleSound() {
+            appState.soundEnabled = !appState.soundEnabled;
+            saveState();
+            updateSoundIcon();
+            if (appState.soundEnabled) playTapSound();
+        }
+
+        function updateSoundIcon() {
+            const onIcon = document.getElementById('soundOnIcon');
+            const offIcon = document.getElementById('soundOffIcon');
+            if (appState.soundEnabled) {
+                onIcon.classList.remove('hidden');
+                offIcon.classList.add('hidden');
+            } else {
+                onIcon.classList.add('hidden');
+                offIcon.classList.remove('hidden');
+            }
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        let toastTimeout = null;
+        function showToast(msg) {
+            const toast = document.getElementById('toastNotification');
+            toast.textContent = msg;
+            toast.classList.remove('hidden');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2600);
+        }
+
+        function showDialog(message, onConfirm) {
+            document.getElementById('dialogMessage').textContent = message;
+            const confirmBtn = document.getElementById('dialogConfirmBtn');
+            confirmBtn.onclick = () => {
+                closeModal('customDialogModal');
+                onConfirm();
+            };
+            document.getElementById('customDialogModal').classList.remove('hidden');
+        }
+
+        // ---------------------------------------------------------
+        // 13. INITIALIZATION
+        // ---------------------------------------------------------
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            updateBranchDisplay();
+            updateSoundIcon();
+            renderSaleProducts();
+            updateCartUI();
+            updateQuickStockBadge();
+            startCloudSyncLoop();
+
+            // Prompt staff to set branch/event name on first open if blank
+            if (!appState.branchName) {
+                setTimeout(() => openBranchModal(true), 350);
+            }
+        });
+    </script>
+</body>
+</html>
